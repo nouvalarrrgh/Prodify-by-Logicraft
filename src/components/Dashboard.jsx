@@ -329,6 +329,7 @@ const Dashboard = () => {
               ))}
 
               <button
+                data-html2canvas-ignore="true"
                 onClick={generateExecutiveReport}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 rounded-2xl px-4 py-2.5 text-center spatial-hover transition-all shadow-lg flex items-center justify-center gap-2 group"
               >
@@ -368,6 +369,7 @@ const Dashboard = () => {
                   <p className="text-sm font-semibold text-slate-700">Meow! Mau tahu sejauh mana keseimbangan hidupmu minggu ini? Yuk ngobrol bentar!</p>
                 </div>
                 <button
+                  data-html2canvas-ignore="true"
                   onClick={startEvaluation}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl transition-all active:scale-95 shadow-lg shadow-indigo-600/30">
                   Mulai Evaluasi
@@ -434,6 +436,7 @@ const Dashboard = () => {
                   </div>
                 )}
                 <button
+                  data-html2canvas-ignore="true"
                   onClick={() => setEvaluationState('idle')}
                   className="mt-4 text-xs font-bold text-indigo-500 hover:text-indigo-700 transition-colors">
                   Evaluasi Ulang
@@ -449,7 +452,7 @@ const Dashboard = () => {
           <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-50 rounded-full translate-x-1/2 -translate-y-1/2 pointer-events-none" />
           <h3 className="font-bold text-slate-700 flex items-center gap-2 mb-6 relative z-10">
             <LayoutGrid className="w-5 h-5 text-emerald-500" /> Weekly Heatmap
-            <span className="ml-auto text-xs text-slate-400 font-medium">Klik kotak untuk ubah aktivitas</span>
+            <span data-html2canvas-ignore="true" className="ml-auto text-xs text-slate-400 font-medium">Klik kotak untuk ubah aktivitas</span>
           </h3>
           <div className="grid grid-cols-12 gap-1.5 relative z-10">
             {heatmap.map((item, i) => (
