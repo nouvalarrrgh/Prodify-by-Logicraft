@@ -3,104 +3,72 @@ import Lottie from "lottie-react";
 import plantData from "../assets/lottie/plant.json";
 import {
   Play,
-  Pause,
-  Square,
-  CheckCircle,
-  RotateCcw,
   Trees,
   Volume2,
   VolumeX,
-  ShieldAlert,
   AlertTriangle,
-  Sparkles,
   Sprout,
-  Leaf,
   Skull,
   X,
-  CloudRain,
-  Coffee,
-  Clock
+  Flame
 } from "lucide-react";
-import { NekoMascotFull } from "./NekoMascot";
 
+// SINKRONISASI TEMA: Menggunakan Indigo/Purple sebagai warna utama sesi
 const DURATION_OPTIONS = [
-  { label: '25 min', seconds: 25 * 60, desc: 'Pomodoro Klasik' },
-  { label: '45 min', seconds: 45 * 60, desc: 'Fokus Mendalam' },
-  { label: '90 min', seconds: 90 * 60, desc: 'Ultradian Rhythm' },
+  { label: '25 Menit', seconds: 25 * 60, desc: 'Pomodoro' },
+  { label: '45 Menit', seconds: 45 * 60, desc: 'Deep Work' },
+  { label: '90 Menit', seconds: 90 * 60, desc: 'Ultradian' },
 ];
 
 const DeepFocus = () => {
-  const [selectedDuration, setSelectedDuration] = useState(0); // index of DURATION_OPTIONS
+  const [selectedDuration, setSelectedDuration] = useState(0);
   const TOTAL_TIME = DURATION_OPTIONS[selectedDuration].seconds;
   const [isRunning, setIsRunning] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const fullscreenRef = useRef(null);
-  const audioRefs = useRef({
-    rain: null,
-    cafe: null,
-    clock: null
-  });
 
+  // Single Audio Track for Lofi Study
+  const audioRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [volumes, setVolumes] = useState({ rain: 50, cafe: 0, clock: 0 }); // 0-100
-  const [preCountdown, setPreCountdown] = useState(null); // null, 3, 2, 1, "Mulai!"
+  const [preCountdown, setPreCountdown] = useState(null);
 
-  // Initialize Audio only once
   useEffect(() => {
-    audioRefs.current.rain = new Audio("/audio/rain.ogg");
-    audioRefs.current.cafe = new Audio("/audio/cafe.ogg");
-    audioRefs.current.clock = new Audio("/audio/clock.ogg");
-
-    Object.values(audioRefs.current).forEach(audio => {
-      audio.loop = true;
-    });
+    // Audio tetap sama (Lofi Study)
+    audioRef.current = new Audio("https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3");
+    audioRef.current.loop = true;
+    audioRef.current.volume = 0.5;
 
     return () => {
-      Object.values(audioRefs.current).forEach(audio => {
-        if (audio) {
-          audio.pause();
-          audio.src = "";
-        }
-      });
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+      }
     };
   }, []);
 
-  // Sync volume state to actual audio objects
-  useEffect(() => {
-    if (audioRefs.current.rain) audioRefs.current.rain.volume = volumes.rain / 100;
-    if (audioRefs.current.cafe) audioRefs.current.cafe.volume = volumes.cafe / 100;
-    if (audioRefs.current.clock) audioRefs.current.clock.volume = volumes.clock / 100;
-  }, [volumes]);
-
-  // Gamification Stats
   const [stats, setStats] = useState(() => {
     const saved = localStorage.getItem("forest_stats");
     return saved ? JSON.parse(saved) : { planted: 0, dead: 0 };
   });
 
-  const [treeState, setTreeState] = useState("idle"); // 'idle', 'growing', 'dead', 'success'
+  const [treeState, setTreeState] = useState("idle");
   const [showWarning, setShowWarning] = useState(false);
 
-  // Today's session counter
   const todayKey = `forest_today_${new Date().toISOString().split('T')[0]}`;
-  const [todaySessions, setTodaySessions] = useState(() => parseInt(localStorage.getItem(`forest_today_${new Date().toISOString().split('T')[0]}`) || '0'));
+  const [todaySessions, setTodaySessions] = useState(() => parseInt(localStorage.getItem(todayKey) || '0'));
 
   useEffect(() => {
     localStorage.setItem("forest_stats", JSON.stringify(stats));
   }, [stats]);
 
-  // Audio Playback Controller
   useEffect(() => {
     const shouldPlay = isRunning && !showWarning && treeState === "growing" && !isMuted;
-
-    Object.values(audioRefs.current).forEach(audio => {
-      if (!audio) return;
-      if (shouldPlay) {
-        audio.play().catch((e) => console.log("Audio autoplay prevented:", e));
-      } else {
-        audio.pause();
-      }
-    });
+    if (!audioRef.current) return;
+    if (shouldPlay) {
+      audioRef.current.play().catch(() => { });
+    } else {
+      audioRef.current.pause();
+    }
   }, [isRunning, showWarning, treeState, isMuted]);
 
   useEffect(() => {
@@ -113,9 +81,12 @@ const DeepFocus = () => {
       setIsRunning(false);
       setTreeState("success");
       setStats((s) => ({ ...s, planted: s.planted + 1 }));
-      // Track today's sessions for Dashboard real-time display
-      const todayKey = `forest_today_${new Date().toISOString().split('T')[0]}`;
-      localStorage.setItem(todayKey, String((parseInt(localStorage.getItem(todayKey) || '0') + 1)));
+
+      const currentTodayKey = `forest_today_${new Date().toISOString().split('T')[0]}`;
+      const newSessionCount = parseInt(localStorage.getItem(currentTodayKey) || '0') + 1;
+      localStorage.setItem(currentTodayKey, String(newSessionCount));
+      setTodaySessions(newSessionCount);
+
       if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
       setTimeout(() => {
         setTimeLeft(TOTAL_TIME);
@@ -123,32 +94,19 @@ const DeepFocus = () => {
       }, 4000);
     }
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft, showWarning]);
+  }, [isRunning, timeLeft, showWarning, TOTAL_TIME]);
 
-  // Anti-Cheat: Visibility & Fullscreen Change API
   useEffect(() => {
     const handleVisibilityChange = () => {
-      // If user tabs out or minimizes window while timer is running
-      if (document.hidden && isRunning && treeState === "growing") {
-        killTree();
-      }
+      if (document.hidden && isRunning && treeState === "growing") killTree();
     };
-
     const handleFullscreenChange = () => {
-      // If user presses ESC and exits fullscreen while growing
-      if (
-        !document.fullscreenElement &&
-        isRunning &&
-        treeState === "growing" &&
-        !showWarning
-      ) {
+      if (!document.fullscreenElement && isRunning && treeState === "growing" && !showWarning) {
         setShowWarning(true);
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -167,15 +125,14 @@ const DeepFocus = () => {
     }, 5000);
   };
 
-  // Pre-start Countdown Logic
   useEffect(() => {
     let timer;
     if (preCountdown !== null) {
       if (typeof preCountdown === "number" && preCountdown > 1) {
         timer = setTimeout(() => setPreCountdown(preCountdown - 1), 1000);
       } else if (preCountdown === 1) {
-        timer = setTimeout(() => setPreCountdown("Mulai!"), 1000);
-      } else if (preCountdown === "Mulai!") {
+        timer = setTimeout(() => setPreCountdown("Fokus!"), 1000);
+      } else if (preCountdown === "Fokus!") {
         timer = setTimeout(() => {
           setPreCountdown(null);
           setIsRunning(true);
@@ -185,14 +142,12 @@ const DeepFocus = () => {
       }
     }
     return () => clearTimeout(timer);
-  }, [preCountdown]);
+  }, [preCountdown, TOTAL_TIME]);
 
   const handleStart = () => {
     setTimeLeft(DURATION_OPTIONS[selectedDuration].seconds);
     if (fullscreenRef.current) {
-      fullscreenRef.current
-        .requestFullscreen()
-        .catch((err) => console.log("Fullscreen failed:", err));
+      fullscreenRef.current.requestFullscreen().catch(() => { });
     }
     setPreCountdown(3);
   };
@@ -216,312 +171,184 @@ const DeepFocus = () => {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const strokeDashoffset = 830 - 830 * (timeLeft / TOTAL_TIME);
+  // SVG Progress Circle calculation
+  const circleRadius = 138;
+  const circleCircumference = 2 * Math.PI * circleRadius;
+  const strokeDashoffset = treeState === "idle" ? 0 : circleCircumference - (timeLeft / TOTAL_TIME) * circleCircumference;
 
-  const getTreeVisual = () => {
-    if (treeState === "dead") {
-      return (
-        <div className="flex flex-col items-center animate-fade-in">
-          <div className="relative">
-            <Skull
-              className="w-24 h-24 text-rose-800 drop-shadow-[0_0_20px_rgba(225,29,72,0.4)]"
-              strokeWidth={1.5}
-            />
-            <div className="absolute inset-0 bg-rose-500/20 rounded-full blur-xl animate-pulse"></div>
-          </div>
-          <p className="text-rose-500 font-bold mt-4 text-lg">
-            Pohon layu dan mati...
-          </p>
-          <p className="text-rose-400 text-xs mt-1">
-            Gagal merawat pohon karena distraksi.
-          </p>
-        </div>
-      );
-    }
+  // SINKRONISASI WARNA: Menentukan warna aksen berdasarkan state (Default: Indigo)
+  const getAccentColor = () => {
+    if (treeState === "dead") return "text-rose-500";
+    if (treeState === "success") return "text-violet-400"; // Sukses jadi ungu cerah
+    return "text-indigo-400"; // Default running
+  };
 
-    if (treeState === "success") {
-      return (
-        <div className="flex flex-col items-center animate-bounce">
-          <div className="w-48 h-48 -mb-8 flex items-center justify-center drop-shadow-[0_0_25px_rgba(52,211,153,0.6)]">
-            <Trees className="w-32 h-32 text-emerald-400" />
-          </div>
-          <p className="text-emerald-400 font-bold mt-4 text-xl tracking-wide">
-            Pohon Tumbuh Sempurna!
-          </p>
-          <p className="text-emerald-300 text-xs mt-1">
-            +1 Pohon ke dalam Hutan Virtual
-          </p>
-        </div>
-      );
-    }
-
-    if (treeState === "growing") {
-      return (
-        <div className="relative flex items-center justify-center">
-          {isRunning && (
-            <div className="absolute -inset-4 border-2 border-indigo-400/30 rounded-full animate-spin-slow pointer-events-none" />
-          )}
-
-          <div
-            className={`w-48 h-48 md:w-64 md:h-64 rounded-full flex flex-col items-center justify-center shadow-inner relative overflow-hidden transition-all duration-1000 ${isRunning ? "bg-indigo-50/50 scale-105" : "bg-slate-50 scale-100"
-              } ${treeState === "dead" && "bg-rose-50 grayscale"
-              } ${treeState === "success" && "bg-emerald-50"}`}
-          >
-            <div className="w-40 h-40 -mb-6 flex items-center justify-center animate-pulse drop-shadow-[0_0_15px_rgba(52,211,153,0.4)]">
-              <Lottie animationData={plantData} loop={true} className="w-full h-full" />
-            </div>
-            <p className="text-emerald-300 text-sm mt-4 font-bold tracking-wide animate-pulse">
-              Merawat pohon fokus...
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    // Idle
-    return (
-      <div className="flex flex-col items-center text-slate-500 transition-all hover:scale-105 duration-500 opacity-60 grayscale">
-        <div className="relative flex items-center justify-center">
-          {treeState === "idle" && !isRunning && preCountdown === null && (
-            <div className="absolute inset-0 bg-indigo-50/50 rounded-full animate-pulse-glow" />
-          )}
-          <div className="w-32 h-32 -mb-4 flex items-center justify-center drop-shadow-lg">
-            <Sprout className="w-16 h-16 text-slate-400" strokeWidth={1.5} />
-          </div>
-        </div>
-        <p className="text-slate-400 text-sm mt-4 font-medium">
-          Bebas Gangguan. Tumbuhkan Hutanmu.
-        </p>
-      </div>
-    );
+  const getButtonBgColor = () => {
+    if (treeState === "dead") return "bg-rose-600";
+    return "bg-indigo-600";
   };
 
   return (
     <div
       ref={fullscreenRef}
-      className="min-h-full rounded-3xl overflow-hidden shadow-2xl relative flex flex-col items-center justify-center p-6 md:p-10 group py-10 bg-slate-900 pb-32"
+      className="min-h-full md:min-h-[calc(100vh-4rem)] rounded-3xl overflow-hidden relative flex items-center justify-center p-4 md:p-8"
     >
-      {/* Aesthetic Nature Background */}
+      {/* SINKRONISASI BUMNU: Background bernuansa Ungu/Indigo */}
       <div
         className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-1000"
         style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?q=80&w=2674&auto=format&fit=crop')`, // Bright sunny forest
-          filter:
-            treeState === "dead"
-              ? "grayscale(80%) brightness(50%) sepia(30%) hue-rotate(-50deg)"
-              : "brightness(90%)",
+          // Gambar abstract night/space yang dominan ungu
+          backgroundImage: `url('./public/3696aab9266c4104a9aa2a80d4c358dd.jpg')`,
+          filter: treeState === "dead" ? "grayscale(100%) brightness(80%) blur(8px)" : "brightness(50%) blur(4px)",
         }}
-      ></div>
-      {/* Dark gradient overlay for text readability */}
-      <div
-        className={`absolute inset-0 z-0 transition-colors duration-1000 ${treeState === "dead" ? "bg-rose-950/60" : treeState === "success" ? "bg-emerald-900/40" : "bg-slate-900/40"}`}
-      ></div>
+      />
+      {/* SINKRONISASI TINT: Overlay pekat bernuansa Indigo/Slate */}
+      <div className={`absolute inset-0 z-0 transition-colors duration-1000 ${treeState === "dead" ? "bg-rose-950/70" : treeState === "success" ? "bg-violet-950/60" : "bg-slate-950/80"}`} />
 
-      <div className="relative z-10 text-center w-full max-w-lg flex flex-col h-full py-4">
-        {/* Top Header & Stats */}
-        <div className="flex justify-center gap-4 items-center opacity-90 transition-opacity w-full max-w-sm mx-auto mb-6">
-          <div
-            className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl border border-white/30 backdrop-blur-md shadow-lg"
-            title="Pohon Ditanam"
-          >
-            <Trees className="w-4 h-4 text-emerald-300 drop-shadow-md" />
-            <span className="text-white font-bold text-xs md:text-sm drop-shadow-md">
-              {stats.planted}
-            </span>
+      {/* Main Glassmorphism Card */}
+      <div className="relative z-10 w-full max-w-2xl bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 flex flex-col items-center shadow-2xl spatial-shadow">
+
+        {/* Top Bar: Stats & Audio Control */}
+        <div className="flex justify-between items-center w-full mb-8">
+          <div className="flex gap-3">
+            {/* SINKRONISASI TEXT: emerald -> indigo */}
+            <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 text-indigo-300 font-bold text-xs" title="Pohon Berhasil Ditanam">
+              <Trees className="w-4 h-4" /> {stats.planted}
+            </div>
+            <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 text-rose-300 font-bold text-xs" title="Pohon Layu">
+              <Skull className="w-4 h-4" /> {stats.dead}
+            </div>
           </div>
 
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="bg-white/20 p-2.5 rounded-xl border border-white/30 backdrop-blur-md shadow-lg hover:bg-white/30 transition-colors text-white cursor-pointer"
-            title={isMuted ? "Nyalakan Musik Lofi" : "Matikan Musik Lofi"}
+            className="bg-white/10 p-2.5 rounded-full border border-white/10 hover:bg-white/20 transition-all text-white cursor-pointer group"
           >
-            {isMuted ? (
-              <VolumeX className="w-5 h-5 text-slate-300" />
-            ) : (
-              <Volume2 className="w-5 h-5 text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            )}
+            {/* SINKRONISASI ICON: emerald -> indigo */}
+            {isMuted ? <VolumeX className="w-5 h-5 text-slate-400" /> : <Volume2 className="w-5 h-5 text-indigo-300 group-hover:scale-110 transition-transform" />}
           </button>
-
-          <div
-            className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl border border-white/30 backdrop-blur-md shadow-lg"
-            title="Pohon Mati"
-          >
-            <Skull className="w-4 h-4 text-rose-300 drop-shadow-md" />
-            <span className="text-white font-bold text-xs md:text-sm drop-shadow-md">
-              {stats.dead}
-            </span>
-          </div>
         </div>
 
-        {/* Dynamic Tree Visual */}
-        <div className="mb-4 h-32 flex items-end justify-center shrink-0">
-          {getTreeVisual()}
-        </div>
-
-        {/* Desk Clock Aesthetic */}
-        <div className="relative flex flex-col items-center justify-center mx-auto mb-10 shrink-0">
-          {/* Clock Base/Stand */}
-          <div className="absolute -bottom-4 w-40 h-8 bg-slate-800 rounded-[100%] blur-sm opacity-50"></div>
-          <div className="absolute -bottom-3 w-32 h-6 bg-slate-200/20 backdrop-blur-xl rounded-t-3xl border-t border-white/30"></div>
-          <div className="absolute -bottom-4 flex gap-12">
-            <div className="w-3 h-6 bg-slate-300/40 backdrop-blur-md rounded-full rotate-12 border border-white/20"></div>
-            <div className="w-3 h-6 bg-slate-300/40 backdrop-blur-md rounded-full -rotate-12 border border-white/20"></div>
-          </div>
-
-          {/* Main Clock Face */}
-          <div className="relative flex items-center justify-center w-64 h-64 md:w-72 md:h-72 rounded-full border-[16px] border-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_10px_20px_rgba(0,0,0,0.2)] transition-shadow duration-700">
-            {/* Inner Clock Background (Solid color to prevent blur bleeding artifacts) */}
-            <div className="absolute inset-0 rounded-full bg-slate-900 -z-10 shadow-[inner_0_0_30px_rgba(0,0,0,0.8)]"></div>
-
-            {/* Inner Ring Glow */}
-            <div className="absolute inset-1 rounded-full border border-slate-700/50 pointer-events-none"></div>
-
-            <svg
-              className="absolute inset-0 w-full h-full transform -rotate-90"
-              overflow="visible"
-              viewBox="0 0 288 288"
-            >
-              {/* SVG Glow Filter Definition */}
-              <defs>
-                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="8" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-              </defs>
-
+        {/* Centerpiece: Timer & Tree Ring */}
+        <div className="relative flex flex-col items-center justify-center mb-8">
+          <div className="relative w-64 h-64 md:w-80 md:h-80 flex items-center justify-center">
+            {/* SVG Ring */}
+            <svg className="absolute inset-0 w-full h-full transform -rotate-90 drop-shadow-2xl" overflow="visible" viewBox="0 0 288 288">
               {/* Background Track */}
+              <circle cx="144" cy="144" r={circleRadius} stroke="rgba(255,255,255,0.05)" strokeWidth="8" fill="transparent" />
+              {/* Progress Track: SINKRONISASI WARNA */}
               <circle
                 cx="144"
                 cy="144"
-                r="138"
-                stroke="rgba(255,255,255,0.05)"
+                r={circleRadius}
+                stroke="currentColor"
                 strokeWidth="8"
                 fill="transparent"
-              />
-              {/* Progress Track (Uses native SVG filter for glow) */}
-              <circle
-                cx="144"
-                cy="144"
-                r="138"
-                stroke="currentColor"
-                strokeWidth="10"
-                fill="transparent"
                 strokeLinecap="round"
-                className={`${treeState === "dead" ? "text-rose-500" : treeState === "success" ? "text-emerald-400" : isRunning ? "text-emerald-400" : "text-slate-500"} transition-all`}
-                strokeDasharray="867"
-                style={{
-                  strokeDashoffset:
-                    treeState === "idle"
-                      ? 0
-                      : 867 - 867 * (timeLeft / TOTAL_TIME),
-                  filter: "url(#glow)",
-                  transition: "stroke-dashoffset 1s linear",
-                }}
+                className={`${getAccentColor()} transition-all duration-1000 ease-linear`}
+                strokeDasharray={circleCircumference}
+                strokeDashoffset={strokeDashoffset}
               />
             </svg>
-            <div className="flex flex-col items-center">
-              <span
-                className={`text-6xl md:text-7xl font-black font-mono tracking-widest ${treeState === "dead" ? "text-rose-400" : "text-white"}`}
-              >
-                {formatTime(timeLeft)}
-              </span>
-              {isRunning && treeState === "growing" && (
-                <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest mt-2 animate-pulse">
-                  Menumbuhkan...
-                </span>
+
+            {/* Visual Inside the Ring */}
+            {/* SINKRONISASI FILTER: Sukses tetap cerah dengan tint ungu */}
+            <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-1000 ${treeState === "dead" ? "grayscale opacity-80" : ""}`}>
+              {treeState === "growing" || treeState === "success" ? (
+                <div className="w-32 h-32 md:w-40 md:h-40 flex items-center justify-center -mb-4 relative">
+                  {/* Tambah glow ungu saat sukses */}
+                  {treeState === "success" && <div className="absolute inset-4 bg-violet-500/30 rounded-full blur-2xl animate-pulse"></div>}
+                  <Lottie animationData={plantData} loop={treeState === "growing"} className="w-full h-full drop-shadow-[0_0_15px_rgba(139,92,246,0.3)] relative z-10" />
+                </div>
+              ) : treeState === "dead" ? (
+                <Skull className="w-20 h-20 text-rose-500 mb-2 drop-shadow-md" />
+              ) : (
+                <Sprout className="w-20 h-20 text-slate-500 mb-2 drop-shadow-md opacity-50" />
               )}
             </div>
           </div>
+
+          {/* Huge Timer Text */}
+          <div className="mt-8 flex flex-col items-center">
+            <span className={`text-7xl md:text-8xl font-black tracking-tighter tabular-nums ${treeState === "dead" ? "text-rose-400" : "text-white"} drop-shadow-xl`}>
+              {formatTime(timeLeft)}
+            </span>
+            {/* SINKRONISASI TEXT: emerald -> indigo/violet */}
+            {isRunning && treeState === "growing" ? (
+              <span className="text-xs uppercase font-bold text-indigo-300 tracking-widest mt-3 animate-pulse">Sesi Fokus Indigo</span>
+            ) : treeState === "dead" ? (
+              <span className="text-xs uppercase font-bold text-rose-400 tracking-widest mt-3">Sesi Terganggu</span>
+            ) : treeState === "success" ? (
+              <span className="text-xs uppercase font-bold text-violet-300 tracking-widest mt-3">Panen Berhasil! nyaa~</span>
+            ) : (
+              <span className="text-xs uppercase font-bold text-slate-500 tracking-widest mt-3">Siap Memulai</span>
+            )}
+          </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-col gap-4 w-full justify-center items-center">
-          {treeState === "idle" ? (
+        {/* Bottom Controls */}
+        <div className="w-full flex flex-col items-center gap-6 mt-4">
+          {treeState === "idle" || treeState === "success" || treeState === "dead" ? (
             <>
-              {/* Duration selector */}
-              <div className="flex gap-2 w-full max-w-[280px]">
-                {DURATION_OPTIONS.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setSelectedDuration(i); setTimeLeft(opt.seconds); }}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${selectedDuration === i
-                        ? 'bg-white text-emerald-700 border-emerald-300 shadow-md'
-                        : 'bg-white/10 text-white/70 border-white/20 hover:bg-white/20'
-                      }`}
-                  >
-                    <div>{opt.label}</div>
-                    <div className={`text-[9px] font-medium ${selectedDuration === i ? 'text-emerald-500' : 'text-white/40'}`}>{opt.desc}</div>
-                  </button>
-                ))}
-              </div>
-              {/* Today streak badge */}
-              {todaySessions > 0 && (
-                <div className="flex items-center gap-2 bg-white/15 border border-white/20 rounded-2xl px-4 py-2">
-                  <span className="text-emerald-300 font-black text-lg">{todaySessions}</span>
-                  <span className="text-white/70 text-xs font-medium">sesi selesai hari ini</span>
-                  {todaySessions >= 3 && <span className="text-yellow-300 text-xs font-bold">🔥 Flow State!</span>}
+              {/* SINKRONISASI TABS: emerald -> indigo */}
+              {treeState === "idle" && (
+                <div className="flex bg-white/5 p-1.5 rounded-2xl w-full max-w-sm border border-white/10 backdrop-blur-md">
+                  {DURATION_OPTIONS.map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setSelectedDuration(i); setTimeLeft(opt.seconds); }}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedDuration === i
+                        ? 'bg-indigo-600 text-white shadow-lg transform scale-[1.02]'
+                        : 'text-slate-400 hover:text-white hover:bg-white/10'
+                        }`}
+                    >
+                      <div className="mb-0.5">{opt.label}</div>
+                      <div className={`text-[9px] font-medium ${selectedDuration === i ? 'text-indigo-200' : 'opacity-50'}`}>{opt.desc}</div>
+                    </button>
+                  ))}
                 </div>
               )}
-              <button
-                onClick={handleStart}
-                className="w-full max-w-[280px] py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-3 cursor-pointer bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/30 shadow-xl hover:-translate-y-1"
-              >
-                <div className="p-1.5 bg-white/20 rounded-full">
-                  <Play className="w-5 h-5 fill-current" />
-                </div>
-                <span>Mulai Sesi Fokus</span>
-              </button>
+
+              {/* Start Button & Streak */}
+              <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 max-w-sm">
+                {(treeState === "idle" || treeState === "success" || treeState === "dead") && (
+                  <button
+                    onClick={handleStart}
+                    className={`w-full py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${getButtonBgColor()} text-white hover:brightness-110 shadow-[0_0_30px_rgba(79,70,229,0.3)] hover:shadow-[0_0_40px_rgba(79,70,229,0.5)] hover:-translate-y-1`}
+                  >
+                    <Play className="w-5 h-5 fill-current" /> {treeState === "idle" ? "Mulai Sesi" : "Mulai Lagi"}
+                  </button>
+                )}
+
+                {/* SINKRONISASI STREAK: emerald -> indigo */}
+                {todaySessions > 0 && treeState === "idle" && (
+                  <div className="hidden md:flex flex-col items-center justify-center px-6 py-2 bg-white/5 border border-white/10 rounded-2xl h-[60px] shrink-0">
+                    <span className="flex items-center gap-1 text-indigo-300 font-bold text-sm"><Flame className="w-4 h-4 fill-current" /> {todaySessions}</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-bold">Hari Ini</span>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <button
               onClick={handleGiveUpClick}
-              disabled={treeState === "dead" || treeState === "success"}
-              className={`w-full max-w-[280px] py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 ${treeState === "dead" || treeState === "success" ? "bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700" : "bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/30 shadow-lg hover:-translate-y-1 cursor-pointer"}`}
+              disabled={treeState === "success"}
+              className={`w-full max-w-sm py-4 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 ${treeState === "success" ? "bg-white/10 text-white/40 cursor-not-allowed border border-white/10" : "bg-rose-600 text-white hover:bg-rose-700 shadow-[0_0_30px_rgba(225,29,72,0.3)] cursor-pointer hover:-translate-y-1"}`}
             >
               {treeState === "growing" && <X className="w-5 h-5" />}
               <span>
-                {treeState === "growing"
-                  ? "Menyerah (Bunuh Pohon)"
-                  : treeState === "dead"
-                    ? "Membersihkan Ranting..."
-                    : "Panen Pohon..."}
+                {treeState === "growing" ? "Menyerah (Bunuh Pohon)" : "Memproses..."}
               </span>
             </button>
-          )}
-
-          {/* Spatial Audio Mixer */}
-          {treeState === "idle" && (
-            <div className="w-full max-w-[280px] mt-6 bg-slate-800/80 backdrop-blur-xl border border-slate-700 p-4 rounded-2xl flex flex-col gap-4 shadow-xl">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                <span>Ambient Mixer</span>
-                <button onClick={() => setIsMuted(!isMuted)} aria-label={isMuted ? "Bunyikan Audio" : "Bisukan Audio"} className="text-emerald-400 hover:text-white transition-colors focus:ring-2 focus:ring-emerald-500 rounded-md p-1">
-                  {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
-                </button>
-              </h4>
-
-              <div className="flex items-center gap-3">
-                <CloudRain className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
-                <input type="range" min="0" max="100" value={volumes.rain} onChange={(e) => setVolumes({ ...volumes, rain: e.target.value })} aria-label="Volume Suara Hujan" className="w-full accent-sky-400 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:ring-2 focus:ring-sky-500" />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Coffee className="w-4 h-4 text-amber-500 shrink-0" aria-hidden="true" />
-                <input type="range" min="0" max="100" value={volumes.cafe} onChange={(e) => setVolumes({ ...volumes, cafe: e.target.value })} aria-label="Volume Suasana Kafe" className="w-full accent-amber-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500" />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Clock className="w-4 h-4 text-slate-300 shrink-0" aria-hidden="true" />
-                <input type="range" min="0" max="100" value={volumes.clock} onChange={(e) => setVolumes({ ...volumes, clock: e.target.value })} aria-label="Volume Detak Jam" className="w-full accent-slate-300 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer focus:ring-2 focus:ring-slate-300" />
-              </div>
-            </div>
           )}
         </div>
       </div>
 
       {/* Pre-start Countdown Overlay */}
       {preCountdown !== null && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/90 backdrop-blur-md">
-          <span className="text-8xl md:text-[10rem] font-black text-white animate-bounce drop-shadow-[0_0_40px_rgba(52,211,153,0.8)] tracking-widest">
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl">
+          {/* SINKRONISASI GLOW: emerald -> indigo */}
+          <span className="text-[12rem] font-black text-white animate-bounce drop-shadow-[0_0_80px_rgba(79,70,229,0.8)] tracking-tighter tabular-nums">
             {preCountdown}
           </span>
         </div>
@@ -529,31 +356,21 @@ const DeepFocus = () => {
 
       {/* Warning Modal (Give Up) */}
       {showWarning && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md animate-fade-in p-6">
-          <div className="bg-slate-800 border border-rose-500/30 w-full max-w-sm rounded-[2rem] p-8 text-center shadow-2xl flex flex-col items-center">
-            <div className="w-16 h-16 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 animate-pulse">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md animate-fade-in p-6">
+          <div className="bg-slate-900 border border-white/10 w-full max-w-sm rounded-[2.5rem] p-8 text-center shadow-2xl flex flex-col items-center spatial-shadow">
+            <div className="w-16 h-16 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mb-6 animate-pulse border border-rose-500/30">
               <AlertTriangle className="w-8 h-8" />
             </div>
-            <h3 className="text-2xl font-black text-white mb-2 tracking-tight">
-              Menyerah Sekarang?
-            </h3>
-            <p className="text-slate-400 font-medium mb-8 leading-relaxed">
-              Pohon yang sedang Anda tanam akan{" "}
-              <strong className="text-rose-400">langsung mati dan layu</strong>{" "}
-              jika Anda keluar. Yakin ingin membatalkan komitmen Anda?
+            <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Batalkan Sesi?</h3>
+            <p className="text-slate-400 font-medium mb-8 text-sm leading-relaxed">
+              Pohon Indigo yang sedang tumbuh akan <strong className="text-rose-400">mati layu</strong> jika Anda keluar sekarang.
             </p>
-
             <div className="flex gap-3 w-full">
-              <button
-                onClick={resumeFocus}
-                className="flex-1 py-3.5 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors cursor-pointer"
-              >
-                Kembali Fokus
+              {/* SINKRONISASI BUTTON: emerald -> indigo */}
+              <button onClick={resumeFocus} className="flex-1 py-3.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer shadow-lg shadow-indigo-600/20">
+                Lanjut Fokus
               </button>
-              <button
-                onClick={killTree}
-                className="flex-1 py-3.5 rounded-xl font-bold bg-slate-700 hover:bg-rose-600 hover:text-white text-rose-400 transition-colors cursor-pointer"
-              >
+              <button onClick={killTree} className="flex-1 py-3.5 rounded-xl font-bold bg-slate-800 hover:bg-rose-600 text-rose-300 hover:text-white transition-colors cursor-pointer border border-white/10">
                 Bunuh Pohon
               </button>
             </div>
