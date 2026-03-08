@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { User, Mail, GraduationCap, MapPin, Camera, Save, Phone, Link as LinkIcon, AtSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Mail, GraduationCap, MapPin, Camera, Save, Phone, AtSign } from 'lucide-react';
 
-export default function Profile() {
-    const [profile, setProfile] = useState({
+const getInitialProfile = () => {
+    const baseProfile = {
         name: '',
         username: '',
         email: '',
@@ -13,30 +13,36 @@ export default function Profile() {
         portfolio: '',
         bio: '',
         avatar: ''
-    });
+    };
+
+    const savedInfo = localStorage.getItem('stuprod_profileInfo');
+    const userSession = JSON.parse(localStorage.getItem('stuprod_user') || '{}');
+
+    if (savedInfo) {
+        const parsed = JSON.parse(savedInfo);
+        if (userSession.name) parsed.name = userSession.name;
+        if (userSession.email) parsed.email = userSession.email;
+        if (!parsed.username) parsed.username = (userSession.name || 'student').toLowerCase().replace(/\s+/g, '');
+        return { ...baseProfile, ...parsed };
+    }
+
+    if (userSession.name) {
+        return {
+            ...baseProfile,
+            name: userSession.name,
+            username: userSession.name.toLowerCase().replace(/\s+/g, ''),
+            email: userSession.email || 'mahasiswa@kampus.ac.id',
+            university: 'Belum diisi',
+            major: 'Belum diisi'
+        };
+    }
+
+    return baseProfile;
+};
+
+export default function Profile() {
+    const [profile, setProfile] = useState(getInitialProfile);
     const [isEditing, setIsEditing] = useState(false);
-
-    useEffect(() => {
-        const savedInfo = localStorage.getItem('stuprod_profileInfo');
-        const userSession = JSON.parse(localStorage.getItem('stuprod_user') || '{}');
-
-        if (savedInfo) {
-            const parsed = JSON.parse(savedInfo);
-            if (userSession.name) parsed.name = userSession.name;
-            if (userSession.email) parsed.email = userSession.email;
-            if (!parsed.username) parsed.username = userSession.name.toLowerCase().replace(/\s+/g, '');
-            setProfile(parsed);
-        } else if (userSession.name) {
-            setProfile(prev => ({
-                ...prev,
-                name: userSession.name,
-                username: userSession.name.toLowerCase().replace(/\s+/g, ''),
-                email: userSession.email || 'mahasiswa@kampus.ac.id',
-                university: 'Belum diisi',
-                major: 'Belum diisi'
-            }));
-        }
-    }, []);
 
     const handleChange = (e) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });

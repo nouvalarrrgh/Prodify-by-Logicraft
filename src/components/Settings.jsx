@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Bell, Shield, Monitor, LogOut, Check, Trash2, X, AlertTriangle,
@@ -6,14 +6,18 @@ import {
 } from 'lucide-react';
 
 export default function Settings({ onLogout }) {
-    const [settings, setSettings] = useState({
-        darkMode: false,
-        notifications: true,
-        urgentReminders: true,    // Deadline < 2 Jam
-        habitReminders: true,     // Habit harian
-        focusSounds: true,        // Suara alarm Deep Focus
-        strictFocusMode: true,    // Anti-tab out Deep Focus
-        autoSaveNotes: true,      // ZenNotes
+    const [settings, setSettings] = useState(() => {
+        const defaults = {
+            darkMode: false,
+            notifications: true,
+            urgentReminders: true,    // Deadline < 2 Jam
+            habitReminders: true,     // Habit harian
+            focusSounds: true,        // Suara alarm Deep Focus
+            strictFocusMode: true,    // Anti-tab out Deep Focus
+            autoSaveNotes: true,      // ZenNotes
+        };
+        const saved = localStorage.getItem('stuprod_settings');
+        return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
     });
 
     const [savedMessage, setSavedMessage] = useState('');
@@ -29,18 +33,11 @@ export default function Settings({ onLogout }) {
         { q: "Bagaimana cara kerja Skor Dampak (Impact Score)?", a: "Skor ini mengkalkulasi efisiensi Anda berdasarkan: persentase habit yang selesai, jumlah sesi fokus 25 menit, tugas yang terselesaikan, serta hasil evaluasi kesehatan mental (Radar Keseimbangan) Anda setiap minggunya." },
     ];
 
-    useEffect(() => {
-        const saved = localStorage.getItem('stuprod_settings');
-        if (saved) {
-            setSettings({ ...settings, ...JSON.parse(saved) });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const handleToggle = (key) => {
         const newSettings = { ...settings, [key]: !settings[key] };
         setSettings(newSettings);
         localStorage.setItem('stuprod_settings', JSON.stringify(newSettings));
+        window.dispatchEvent(new Event('storage'));
 
         // TRIGGER GLOBAL DARK MODE
         if (key === 'darkMode') {
@@ -116,7 +113,7 @@ export default function Settings({ onLogout }) {
                 setSavedMessage('Data berhasil dipulihkan! Memuat ulang...');
                 setTimeout(() => window.location.reload(), 1500); // Reload to apply changes
 
-            } catch (error) {
+            } catch {
                 alert("File backup tidak valid atau rusak!");
             }
         };

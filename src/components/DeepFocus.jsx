@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Lottie from "lottie-react";
 import plantData from "../assets/lottie/plant.json";
 import {
@@ -20,6 +20,12 @@ const DURATION_OPTIONS = [
   { label: '90 Menit', seconds: 90 * 60, desc: 'Ultradian' },
 ];
 
+const getLocalDateKey = (dateObj = new Date()) => {
+  const d = new Date(dateObj);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+};
+
 const DeepFocus = () => {
   const [selectedDuration, setSelectedDuration] = useState(0);
   const TOTAL_TIME = DURATION_OPTIONS[selectedDuration].seconds;
@@ -31,6 +37,9 @@ const DeepFocus = () => {
   const audioRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [preCountdown, setPreCountdown] = useState(null);
+  const [appSettings, setAppSettings] = useState(() =>
+    JSON.parse(localStorage.getItem("stuprod_settings") || "{}"),
+  );
 
   useEffect(() => {
     // Audio tetap sama (Lofi Study)
@@ -54,7 +63,7 @@ const DeepFocus = () => {
   const [treeState, setTreeState] = useState("idle");
   const [showWarning, setShowWarning] = useState(false);
 
-  const todayKey = `forest_today_${new Date().toISOString().split('T')[0]}`;
+  const todayKey = `forest_today_${getLocalDateKey()}`;
   const [todaySessions, setTodaySessions] = useState(() => parseInt(localStorage.getItem(todayKey) || '0'));
 
   useEffect(() => {
@@ -62,14 +71,35 @@ const DeepFocus = () => {
   }, [stats]);
 
   useEffect(() => {
-    const shouldPlay = isRunning && !showWarning && treeState === "growing" && !isMuted;
+    const syncSettings = () => {
+      setAppSettings(JSON.parse(localStorage.getItem("stuprod_settings") || "{}"));
+    };
+    window.addEventListener("storage", syncSettings);
+    return () => window.removeEventListener("storage", syncSettings);
+  }, []);
+
+  const killTree = useCallback(() => {
+    setIsRunning(false);
+    setShowWarning(false);
+    setTreeState("dead");
+    setStats((s) => ({ ...s, dead: s.dead + 1 }));
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+    setTimeout(() => {
+      setTimeLeft(TOTAL_TIME);
+      setTreeState("idle");
+    }, 5000);
+  }, [TOTAL_TIME]);
+
+  useEffect(() => {
+    const soundEnabled = appSettings.focusSounds !== false;
+    const shouldPlay = soundEnabled && isRunning && !showWarning && treeState === "growing" && !isMuted;
     if (!audioRef.current) return;
     if (shouldPlay) {
       audioRef.current.play().catch(() => { });
     } else {
       audioRef.current.pause();
     }
-  }, [isRunning, showWarning, treeState, isMuted]);
+  }, [isRunning, showWarning, treeState, isMuted, appSettings]);
 
   useEffect(() => {
     let interval;
@@ -82,7 +112,7 @@ const DeepFocus = () => {
       setTreeState("success");
       setStats((s) => ({ ...s, planted: s.planted + 1 }));
 
-      const currentTodayKey = `forest_today_${new Date().toISOString().split('T')[0]}`;
+      const currentTodayKey = `forest_today_${getLocalDateKey()}`;
       const newSessionCount = parseInt(localStorage.getItem(currentTodayKey) || '0') + 1;
       localStorage.setItem(currentTodayKey, String(newSessionCount));
       setTodaySessions(newSessionCount);
@@ -97,6 +127,8 @@ const DeepFocus = () => {
   }, [isRunning, timeLeft, showWarning, TOTAL_TIME]);
 
   useEffect(() => {
+    if (appSettings.strictFocusMode === false) return undefined;
+
     const handleVisibilityChange = () => {
       if (document.hidden && isRunning && treeState === "growing") killTree();
     };
@@ -111,19 +143,7 @@ const DeepFocus = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, [isRunning, treeState, showWarning]);
-
-  const killTree = () => {
-    setIsRunning(false);
-    setShowWarning(false);
-    setTreeState("dead");
-    setStats((s) => ({ ...s, dead: s.dead + 1 }));
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
-    setTimeout(() => {
-      setTimeLeft(TOTAL_TIME);
-      setTreeState("idle");
-    }, 5000);
-  };
+  }, [isRunning, treeState, showWarning, killTree, appSettings]);
 
   useEffect(() => {
     let timer;
@@ -146,7 +166,7 @@ const DeepFocus = () => {
 
   const handleStart = () => {
     setTimeLeft(DURATION_OPTIONS[selectedDuration].seconds);
-    if (fullscreenRef.current) {
+    if (appSettings.strictFocusMode !== false && fullscreenRef.current) {
       fullscreenRef.current.requestFullscreen().catch(() => { });
     }
     setPreCountdown(3);
@@ -160,7 +180,7 @@ const DeepFocus = () => {
 
   const resumeFocus = () => {
     setShowWarning(false);
-    if (fullscreenRef.current) {
+    if (appSettings.strictFocusMode !== false && fullscreenRef.current) {
       fullscreenRef.current.requestFullscreen().catch(() => { });
     }
   };
@@ -198,7 +218,7 @@ const DeepFocus = () => {
         className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-1000"
         style={{
           // Gambar abstract night/space yang dominan ungu
-          backgroundImage: `url('./public/3696aab9266c4104a9aa2a80d4c358dd.jpg')`,
+          backgroundImage: `url('/3696aab9266c4104a9aa2a80d4c358dd.jpg')`,
           filter: treeState === "dead" ? "grayscale(100%) brightness(80%) blur(8px)" : "brightness(50%) blur(4px)",
         }}
       />

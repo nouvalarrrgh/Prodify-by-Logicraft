@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Layers, BarChart2, BookOpen, CalendarDays, Focus, Bell, Search, Menu, X, ChevronRight, Settings as SettingsIcon, Star, ShieldCheck, Zap, CheckCircle2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import Dashboard from './components/Dashboard';
-import ZenNotes from './components/ZenNotes';
-import TimeManager from './components/TimeManager';
-import DeepFocus from './components/DeepFocus';
-import Habits from './components/Habits';
 import Login from './components/Login';
-import Profile from './components/Profile';
-import Settings from './components/Settings';
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const ZenNotes = lazy(() => import('./components/ZenNotes'));
+const TimeManager = lazy(() => import('./components/TimeManager'));
+const DeepFocus = lazy(() => import('./components/DeepFocus'));
+const Habits = lazy(() => import('./components/Habits'));
+const Profile = lazy(() => import('./components/Profile'));
+const Settings = lazy(() => import('./components/Settings'));
 import CognitiveGuard from './components/CognitiveGuard';
+
+const MotionDiv = motion.div;
 
 
 function App() {
@@ -46,8 +48,10 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [footerModal, setFooterModal] = useState(null);
 
+  const getSettings = () => JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+
   // INIT DARK MODE & GLOBAL DATA
-  const loadGlobalData = () => {
+  const loadGlobalData = useCallback(() => {
     const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
     if (settings.darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -65,7 +69,7 @@ function App() {
     // Default Username jika pInfo.username kosong: hapus spasi dari nama user
     const fallbackUsername = user?.name ? user.name.toLowerCase().replace(/\s+/g, '') : 'student';
     setProfileUsername(pInfo.username || fallbackUsername);
-  };
+  }, [user]);
 
   useEffect(() => {
     loadGlobalData();
@@ -75,7 +79,7 @@ function App() {
       window.removeEventListener('storage', loadGlobalData);
       window.removeEventListener('themeChanged', loadGlobalData);
     }
-  }, [user]);
+  }, [loadGlobalData]);
 
   useEffect(() => {
     const onboarded = localStorage.getItem('stuprod_onboarded_v1');
@@ -117,26 +121,43 @@ function App() {
 
   useEffect(() => {
     const checkNotifs = () => {
+      const settings = getSettings();
+      if (settings.notifications === false) {
+        setNotifications([]);
+        return;
+      }
+
       let notifs = [];
       const now = new Date().getTime();
-      const dTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
-      dTasks.forEach(t => {
-        if (!t.completed && t.deadline) {
-          const diff = new Date(t.deadline).getTime() - now;
-          if (diff > 0 && diff <= 7200000) notifs.push({ id: t.id, title: t.text, desc: 'Deadline < 2 jam!', type: 'urgent', target: 'time_manager' });
-        }
-      });
-      const habits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
-      const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      const dateStr = d.toISOString().split('T')[0];
-      let pendingHabits = 0;
-      habits.forEach(h => { if ((h.history?.[dateStr] || 0) < h.targetCount) pendingHabits++; });
-      if (pendingHabits > 0) notifs.push({ id: 'h_pending', title: 'Rutinitas Pending', desc: `Ada ${pendingHabits} habit hari ini.`, type: 'reminder', target: 'habits' });
+
+      if (settings.urgentReminders !== false) {
+        const dTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
+        dTasks.forEach(t => {
+          if (!t.completed && t.deadline) {
+            const diff = new Date(t.deadline).getTime() - now;
+            if (diff > 0 && diff <= 7200000) notifs.push({ id: t.id, title: t.text, desc: 'Deadline < 2 jam!', type: 'urgent', target: 'time_manager' });
+          }
+        });
+      }
+
+      if (settings.habitReminders !== false) {
+        const habits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
+        const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        const dateStr = d.toISOString().split('T')[0];
+        let pendingHabits = 0;
+        habits.forEach(h => { if ((h.history?.[dateStr] || 0) < h.targetCount) pendingHabits++; });
+        if (pendingHabits > 0) notifs.push({ id: 'h_pending', title: 'Rutinitas Pending', desc: `Ada ${pendingHabits} habit hari ini.`, type: 'reminder', target: 'habits' });
+      }
+
       setNotifications(notifs);
     };
     checkNotifs();
     const interval = setInterval(checkNotifs, 60000);
-    return () => clearInterval(interval);
+    window.addEventListener('storage', checkNotifs);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', checkNotifs);
+    };
   }, [activeMenu]);
 
 
@@ -186,8 +207,8 @@ function App() {
       {/* ========== SIDEBAR ========== */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col w-[280px] h-[100dvh] bg-slate-50/90 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/80 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-all duration-300 shadow-2xl lg:shadow-none overflow-hidden`}>
 
-        <motion.div animate={{ x: [0, 20, 0], y: [0, -20, 0], scale: [1, 1.1, 1] }} transition={{ duration: 15, repeat: Infinity, ease: 'linear' }} className="absolute top-[-10%] left-[-10%] w-[50%] h-[30%] bg-indigo-400/10 blur-3xl rounded-full pointer-events-none" />
-        <motion.div animate={{ x: [0, -20, 0], y: [0, 20, 0], scale: [1, 1.2, 1] }} transition={{ duration: 12, repeat: Infinity, ease: 'linear' }} className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[30%] bg-rose-400/10 blur-3xl rounded-full pointer-events-none" />
+        <MotionDiv animate={{ x: [0, 20, 0], y: [0, -20, 0], scale: [1, 1.1, 1] }} transition={{ duration: 15, repeat: Infinity, ease: 'linear' }} className="absolute top-[-10%] left-[-10%] w-[50%] h-[30%] bg-indigo-400/10 blur-3xl rounded-full pointer-events-none" />
+        <MotionDiv animate={{ x: [0, -20, 0], y: [0, 20, 0], scale: [1, 1.2, 1] }} transition={{ duration: 12, repeat: Infinity, ease: 'linear' }} className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[30%] bg-rose-400/10 blur-3xl rounded-full pointer-events-none" />
 
         <div className="flex items-center justify-between h-[76px] px-6 border-b border-slate-200/50 dark:border-slate-800/80 shrink-0 relative bg-white/50 dark:bg-slate-900/50 backdrop-blur-md">
           <div className="flex items-center gap-3">
@@ -272,7 +293,7 @@ function App() {
 
               <AnimatePresence>
                 {showSearchDrop && (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden z-[100]">
+                  <MotionDiv initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden z-[100]">
                     {searchResults.length > 0 ? searchResults.map((r, i) => (
                       <div key={i} onMouseDown={() => { setActiveMenu(r.action); setSearchQuery(''); setShowSearchDrop(false); }} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-0 flex items-center gap-3">
                         <span className="text-[9px] font-bold text-white bg-indigo-500 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">{r.type}</span>
@@ -281,7 +302,7 @@ function App() {
                     )) : (
                       <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400 font-medium">Tidak ada hasil ditemukan.</div>
                     )}
-                  </motion.div>
+                  </MotionDiv>
                 )}
               </AnimatePresence>
             </div>
@@ -299,7 +320,7 @@ function App() {
 
               <AnimatePresence>
                 {showNotif && (
-                  <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute right-0 top-full mt-3 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl z-[100] overflow-hidden origin-top-right">
+                  <MotionDiv initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute right-0 top-full mt-3 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl z-[100] overflow-hidden origin-top-right">
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 dark:text-white">Pusat Notifikasi</h3>
                       <span className="text-[10px] bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1 rounded-md font-black uppercase tracking-widest">{notifications.length} Baru</span>
@@ -322,7 +343,7 @@ function App() {
                         </div>
                       )}
                     </div>
-                  </motion.div>
+                  </MotionDiv>
                 )}
               </AnimatePresence>
             </div>
@@ -336,11 +357,13 @@ function App() {
 
         {/* CONTAINER SCROLL UTAMA */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 pb-32 relative scroll-smooth custom-scrollbar">
-          <AnimatePresence mode="wait">
-            <motion.div key={activeMenu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="max-w-7xl mx-auto w-full min-h-full">
-              {renderContent()}
-            </motion.div>
-          </AnimatePresence>
+          <Suspense fallback={<PageLoader />}>
+            <AnimatePresence mode="wait">
+              <MotionDiv key={activeMenu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="max-w-7xl mx-auto w-full min-h-full">
+                {renderContent()}
+              </MotionDiv>
+            </AnimatePresence>
+          </Suspense>
         </div>
 
         {/* Global Sticky Footer */}
@@ -467,6 +490,14 @@ function MenuButton({ active, icon, label, classes, onClick }) {
       <span className="font-bold text-sm tracking-wide">{label}</span>
       {active && <div className="ml-auto w-1.5 h-1.5 bg-white/80 rounded-full animate-pulse shadow-sm shadow-white" />}
     </button>
+  );
+}
+
+function PageLoader() {
+  return (
+    <div className="min-h-[300px] flex items-center justify-center">
+      <div className="text-sm font-bold text-slate-500 dark:text-slate-400">Memuat modul...</div>
+    </div>
   );
 }
 

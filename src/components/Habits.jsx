@@ -57,15 +57,7 @@ const Habits = () => {
 
   useEffect(() => {
     localStorage.setItem("stuprod_habits_v4", JSON.stringify(habits));
-    calculateSynergy();
-  }, [habits]);
-
-  const getCurrentCount = (habit, dateStr = activeDate) => {
-    return habit.history?.[dateStr] || 0;
-  };
-
-  const calculateSynergy = () => {
-    const completed = habits.filter((h) => getCurrentCount(h) >= h.targetCount);
+    const completed = habits.filter((h) => (h.history?.[activeDate] || 0) >= h.targetCount);
     const hasCog = completed.some((h) => h.pillar === "cognitive");
     const hasVit = completed.some((h) => h.pillar === "vitality");
     const hasMind = completed.some((h) => h.pillar === "mindfulness");
@@ -76,6 +68,10 @@ const Habits = () => {
 
     setBalanceState(newState);
     localStorage.setItem("stuprod_balance_state", newState);
+  }, [habits, activeDate]);
+
+  const getCurrentCount = (habit, dateStr = activeDate) => {
+    return habit.history?.[dateStr] || 0;
   };
 
   const handleDateChange = (direction) => {
@@ -591,10 +587,7 @@ const Habits = () => {
       ringColor = "text-amber-500 dark:text-amber-400";
     }
 
-    const radius = 14;
-    const circumference = 2 * Math.PI * radius;
     const progressPercent = (getCurrentCount(habit) / habit.targetCount) * 100;
-    const dashoffset = circumference - (progressPercent / 100) * circumference;
 
     return (
       <div key={habit.id} className={`liquid-glass p-3.5 rounded-2xl border transition-all flex items-center gap-4 relative overflow-hidden select-none spatial-hover group ${strokeColor}`}>

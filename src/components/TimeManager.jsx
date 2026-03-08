@@ -1,13 +1,41 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus, CheckCircle, Clock, AlertTriangle, AlertCircle, Trash2, GripVertical, Calendar as CalendarIcon, Target, Inbox, Sun, Moon, Sparkles, MoveRight, Layers, X, BellRing, Check, Edit2
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
-const notifySound = new Audio(
-  "https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3",
-);
+const VALID_QUADRANTS = [
+  "urgent-important",
+  "not-urgent-important",
+  "urgent-not-important",
+  "not-urgent-not-important",
+  "unassigned",
+];
+
+const LEGACY_QUADRANT_MAP = {
+  q1: "urgent-important",
+  q2: "not-urgent-important",
+  q3: "urgent-not-important",
+  q4: "not-urgent-not-important",
+  "urgent-academic": "unassigned",
+};
+
+const normalizeQuadrant = (quadrant) => {
+  const mapped = LEGACY_QUADRANT_MAP[quadrant] || quadrant;
+  return VALID_QUADRANTS.includes(mapped) ? mapped : "unassigned";
+};
+
+const getLocalDateKey = (dateObj = new Date()) => {
+  const d = new Date(dateObj);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split("T")[0];
+};
+
+const createId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `id_${Math.floor(Math.random() * 1e9)}`;
 
 const TimeManager = () => {
   // --- 1. STATE MANAGEMENT ---
@@ -15,28 +43,15 @@ const TimeManager = () => {
     const saved = localStorage.getItem("matrix_tasks");
     if (saved) {
       const parsed = JSON.parse(saved);
-      const migrated = parsed.map((t) => {
-        let q = t.quadrant;
-        if (q === "q1") q = "urgent-important";
-        if (q === "q2") q = "not-urgent-important";
-        if (q === "q3") q = "urgent-not-important";
-        if (q === "q4") q = "not-urgent-not-important";
-        return { ...t, quadrant: q };
-      });
-
-      const validIds = [
-        "urgent-important",
-        "not-urgent-important",
-        "urgent-not-important",
-        "not-urgent-not-important",
-      ];
-      return migrated.filter((t) => validIds.includes(t.quadrant));
+      return parsed.map((t) => ({
+        ...t,
+        quadrant: normalizeQuadrant(t.quadrant),
+      }));
     }
     return [];
   });
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [selectedQuadrant, setSelectedQuadrant] = useState("urgent-important");
   const [newTaskEnergy, setNewTaskEnergy] = useState("1");
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -47,14 +62,10 @@ const TimeManager = () => {
       const parsed = JSON.parse(saved);
       const migrated = {};
       for (const date in parsed) {
-        migrated[date] = parsed[date].map((b) => {
-          let q = b.quadrant;
-          if (q === "q1") q = "urgent-important";
-          if (q === "q2") q = "not-urgent-important";
-          if (q === "q3") q = "urgent-not-important";
-          if (q === "q4") q = "not-urgent-not-important";
-          return { ...b, quadrant: q };
-        });
+        migrated[date] = parsed[date].map((b) => ({
+          ...b,
+          quadrant: normalizeQuadrant(b.quadrant),
+        }));
       }
       return migrated;
     }
@@ -63,9 +74,7 @@ const TimeManager = () => {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [taskToSchedule, setTaskToSchedule] = useState(null);
   const [scheduleTime, setScheduleTime] = useState("08:00");
-  const [scheduleDate, setScheduleDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
+  const [scheduleDate, setScheduleDate] = useState(getLocalDateKey());
 
   // GOALS WIDGET
   const [globalGoal, setGlobalGoal] = useState(() => {
@@ -78,6 +87,10 @@ const TimeManager = () => {
   }, [globalGoal]);
 
   const [notif, setNotif] = useState(null);
+  const [appSettings, setAppSettings] = useState(() =>
+    JSON.parse(localStorage.getItem("stuprod_settings") || "{}"),
+  );
+  const notifyAudioRef = useRef(null);
 
   const [synergyState, setSynergyState] = useState(() => {
     return localStorage.getItem("stuprod_balance_state") || "balanced";
@@ -93,12 +106,46 @@ const TimeManager = () => {
   const [newDeadlineTime, setNewDeadlineTime] = useState("");
   const [activeAlert, setActiveAlert] = useState(null);
 
+  const triggerNotification = useCallback((task) => {
+    const notifEnabled = appSettings.notifications !== false && appSettings.urgentReminders !== false;
+    if (!notifEnabled) return;
+
+    if (notifyAudioRef.current) {
+      notifyAudioRef.current.play().catch((e) => console.log("Audio autoplay prevented:", e));
+    }
+    setActiveAlert(task);
+  }, [appSettings]);
+
   // --- 2. EFFECTS ---
+  useEffect(() => {
+    notifyAudioRef.current = new Audio(
+      "https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3",
+    );
+    return () => {
+      if (notifyAudioRef.current) {
+        notifyAudioRef.current.pause();
+        notifyAudioRef.current.src = "";
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncSettings = () => {
+      setAppSettings(JSON.parse(localStorage.getItem("stuprod_settings") || "{}"));
+      setSynergyState(localStorage.getItem("stuprod_balance_state") || "balanced");
+    };
+    window.addEventListener("storage", syncSettings);
+    return () => window.removeEventListener("storage", syncSettings);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("stuprod_tasks", JSON.stringify(deadlineTasks));
   }, [deadlineTasks]);
 
   useEffect(() => {
+    const notifEnabled = appSettings.notifications !== false && appSettings.urgentReminders !== false;
+    if (!notifEnabled) return undefined;
+
     const checkDeadlines = () => {
       const now = new Date().getTime();
       let updated = false;
@@ -121,12 +168,7 @@ const TimeManager = () => {
 
     const interval = setInterval(checkDeadlines, 30000);
     return () => clearInterval(interval);
-  }, [deadlineTasks]);
-
-  const triggerNotification = (task) => {
-    notifySound.play().catch((e) => console.log("Audio autoplay prevented:", e));
-    setActiveAlert(task);
-  };
+  }, [deadlineTasks, appSettings, triggerNotification]);
 
   const handleAddDeadlineTask = (e) => {
     e.preventDefault();
@@ -134,14 +176,15 @@ const TimeManager = () => {
 
     setDeadlineTasks([
       ...deadlineTasks,
-      {
-        id: Date.now().toString(),
-        text: newDeadlineTask,
-        deadline: newDeadlineTime,
-        completed: false,
-        notified: false,
-        createdAt: new Date().toISOString(),
-      },
+        {
+          id: createId(),
+          text: newDeadlineTask,
+          deadline: newDeadlineTime,
+          completed: false,
+          completedAt: null,
+          notified: false,
+          createdAt: new Date().toISOString(),
+        },
     ]);
     setNewDeadlineTask("");
     setNewDeadlineTime("");
@@ -150,7 +193,9 @@ const TimeManager = () => {
   const toggleDeadlineTask = (id) => {
     setDeadlineTasks(
       deadlineTasks.map((t) =>
-        t.id === id ? { ...t, completed: !t.completed } : t,
+        t.id === id
+          ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null }
+          : t,
       ),
     );
   };
@@ -161,7 +206,7 @@ const TimeManager = () => {
 
   const transferDeadlineTask = (dt) => {
     const newTask = {
-      id: Date.now().toString(),
+      id: createId(),
       title: dt.text,
       quadrant: "unassigned",
       energy: 2,
@@ -235,7 +280,7 @@ const TimeManager = () => {
     if (!newTaskTitle.trim()) return;
 
     const newTask = {
-      id: Date.now().toString(),
+      id: createId(),
       title: newTaskTitle,
       quadrant: "unassigned",
       energy: parseInt(newTaskEnergy),
@@ -255,7 +300,9 @@ const TimeManager = () => {
   const toggleTaskStatus = (taskId) => {
     setTasks(
       tasks.map((t) =>
-        t.id === taskId ? { ...t, completed: !t.completed } : t,
+        t.id === taskId
+          ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null }
+          : t,
       ),
     );
   };
@@ -294,28 +341,11 @@ const TimeManager = () => {
     }
   };
 
-  const onDragUpdate = (update) => {
-    if (!update.destination) return;
-    const scrollEdge = 100;
-    const maxScrollStep = 20;
-
-    const handleScroll = (e) => {
-      const clientY = e.clientY || e.touches?.[0]?.clientY;
-      if (!clientY) return;
-
-      if (clientY < scrollEdge) {
-        window.scrollBy({ top: -maxScrollStep, behavior: 'instant' });
-      } else if (window.innerHeight - clientY < scrollEdge) {
-        window.scrollBy({ top: maxScrollStep, behavior: 'instant' });
-      }
-    };
-  };
-
   // --- 4. CALENDAR FUNCTIONS ---
   const openScheduleModal = (task) => {
     setTaskToSchedule({ ...task });
     setScheduleTime("08:00");
-    setScheduleDate(new Date().toISOString().split("T")[0]);
+    setScheduleDate(getLocalDateKey());
     setShowScheduleModal(true);
   };
 
@@ -325,7 +355,7 @@ const TimeManager = () => {
     const dateStr = scheduleDate;
 
     const newBlock = {
-      id: Date.now().toString(),
+      id: createId(),
       taskId: taskToSchedule.id,
       title: taskToSchedule.title,
       time: scheduleTime || "00:00",
@@ -365,7 +395,7 @@ const TimeManager = () => {
     return date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   };
 
-  const dateStrKey = currentDate.toISOString().split("T")[0];
+  const dateStrKey = getLocalDateKey(currentDate);
   const todayBlocks = scheduledBlocks[dateStrKey] || [];
 
   const next7Days = Array.from({ length: 7 }).map((_, i) => {
@@ -387,8 +417,6 @@ const TimeManager = () => {
   };
 
   const currentDailyEnergy = calculateDailyEnergy(todayBlocks);
-  const energyPercentage = Math.min((currentDailyEnergy / MAX_DAILY_ENERGY) * 100, 100);
-
   let isBurnout = false;
   if (currentDailyEnergy > MAX_DAILY_ENERGY) {
     isBurnout = true;
@@ -544,7 +572,7 @@ const TimeManager = () => {
           </div>
 
           {/* ===== DragDropContext wraps Calendar + Matrix ===== */}
-          <DragDropContext onDragEnd={onDragEnd} onDragUpdate={onDragUpdate}>
+          <DragDropContext onDragEnd={onDragEnd}>
 
             {/* ===== SECTION 2: WEEKLY CALENDAR + SCHEDULE ===== */}
             <div className="liquid-glass dark:bg-slate-900/60 dark:border-slate-700/50 rounded-3xl spatial-shadow overflow-hidden transition-colors">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Layout, FilePlus, FileText, Trash2, Bold, Italic, List, ListOrdered, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type, RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight, PaintBucket, Link, Undo, Redo } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
@@ -34,7 +34,10 @@ const ZenNotes = () => {
   const [currentFont, setCurrentFont] = useState('Arial');
   const [currentFontSize, setCurrentFontSize] = useState('3');
   const [searchQuery, setSearchQuery] = useState('');
-  const [wordCount, setWordCount] = useState(0);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
+    const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+    return settings.autoSaveNotes !== false;
+  });
 
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -47,18 +50,21 @@ const ZenNotes = () => {
   const [drawColor, setDrawColor] = useState('black');
   const [lineWidth, setLineWidth] = useState(4);
 
+  const activePage = pages.find(p => p.id === activePageId);
+  const wordCount = useMemo(() => {
+    const html = activePage?.content || '';
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text ? text.split(' ').length : 0;
+  }, [activePage?.content]);
+
   // Focus and populate text editor
   useEffect(() => {
     if (noteMode === 'text' && editorRef.current) {
-      const activePage = pages.find(p => p.id === activePageId);
       if (activePage && editorRef.current.innerHTML !== activePage.content) {
         editorRef.current.innerHTML = activePage.content || '';
-        const text = editorRef.current.innerText || '';
-        const words = text.trim().split(/\s+/).filter(w => w.length > 0);
-        setWordCount(words.length);
       }
     }
-  }, [activePageId, pages, noteMode]);
+  }, [activePageId, activePage, noteMode]);
 
   // Handle Fullscreen
   useEffect(() => {
@@ -69,13 +75,21 @@ const ZenNotes = () => {
 
   // Autosave
   useEffect(() => {
-    setSaveStatus('Menyimpan...');
+    if (!autoSaveEnabled) return undefined;
     const timeout = setTimeout(() => {
       localStorage.setItem('zen_pages_multi', JSON.stringify(pages));
-      setSaveStatus('Tersimpan Otomatis');
     }, 800);
     return () => clearTimeout(timeout);
-  }, [pages]);
+  }, [pages, autoSaveEnabled]);
+
+  useEffect(() => {
+    const syncAutoSaveSetting = () => {
+      const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+      setAutoSaveEnabled(settings.autoSaveNotes !== false);
+    };
+    window.addEventListener('storage', syncAutoSaveSetting);
+    return () => window.removeEventListener('storage', syncAutoSaveSetting);
+  }, []);
 
   const updateActivePage = (field, value) => {
     setPages(prevPages => prevPages.map(p => p.id === activePageId ? { ...p, [field]: value } : p));
@@ -111,7 +125,7 @@ const ZenNotes = () => {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
     }
-  }, [noteMode, activePageId]);
+  }, [noteMode, activePageId, pages]);
 
   useEffect(() => {
     if (ctxRef.current) {
@@ -199,9 +213,6 @@ const ZenNotes = () => {
   const handleEditorInput = () => {
     if (editorRef.current) {
       updateActivePage('content', editorRef.current.innerHTML);
-      const text = editorRef.current.innerText || '';
-      const words = text.trim().split(/\s+/).filter(w => w.length > 0);
-      setWordCount(words.length);
     }
   };
 
@@ -326,22 +337,28 @@ const ZenNotes = () => {
     const text = selection.toString().trim();
     if (text.length > 0 && text.length < 100) {
       const range = selection.getRangeAt(0).getBoundingClientRect();
+      setSelectedText(text);
       setPopupPos({ x: range.left + (range.width / 2), y: range.top - 40 });
       setShowTaskPopup(true);
-    } else setShowTaskPopup(false);
+    } else {
+      setSelectedText('');
+      setShowTaskPopup(false);
+    }
   };
 
   const saveToMatrix = () => {
+    const cleanText = selectedText.trim();
+    if (!cleanText) return;
     const existingTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
-    const newTask = { id: Date.now().toString(), title: selectedText, tag: 'Dari Catatan', quadrant: 'urgent-academic' };
+    const newTask = { id: Date.now().toString(), title: cleanText, tag: 'Dari Catatan', quadrant: 'unassigned', energy: 1, completed: false };
     localStorage.setItem('matrix_tasks', JSON.stringify([...existingTasks, newTask]));
+    window.dispatchEvent(new Event('storage'));
     setSaveStatus('Tugas Ditambahkan!');
     setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
     setShowTaskPopup(false);
+    setSelectedText('');
     window.getSelection().removeAllRanges();
   };
-
-  const activePage = pages.find(p => p.id === activePageId);
   const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
 
   const editorClasses = `w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} ${pageOrientation === 'potrait' ? 'max-w-[816px]' : 'max-w-[1056px]'}`;
@@ -613,6 +630,9 @@ const ZenNotes = () => {
                     contentEditable
                     onInput={handleEditorInput}
                     onKeyDown={handleKeyDown}
+                    onMouseUp={handleTextSelection}
+                    onKeyUp={handleTextSelection}
+                    onBlur={() => setTimeout(() => setShowTaskPopup(false), 120)}
                     className={editorClasses}
                     style={{ minHeight: `${PAGE_HEIGHT}px`, height: 'max-content', marginBottom: '40px' }}
                     data-placeholder="Mulai menulis jurnal, gagasan, atau tugasmu di sini..."
