@@ -1,16 +1,89 @@
-# React + Vite
+# StuProd
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Platform produktivitas mahasiswa berbasis web dengan tema:
+**"Empowering Students Through Innovative Productivity Tools"**.
 
-Currently, two official plugins are available:
+## Informasi Tim
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Nama Website: `StuProd`
+- Nama Tim: `StuProd Team`
+- Kompetisi: `IFest #14 - Web Development Competition 2026`
 
-## React Compiler
+## 5 Fitur Utama Produktivitas
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. `Smart Notes (ZenNotes)`: Catatan rich-text + whiteboard + ekspor PDF.
+2. `Time & Task Hub`: Deadline tracker, kalender 7 hari, dan priority matrix.
+3. `Deep Focus Workspace`: Sesi fokus anti-distraksi dengan statistik tanam.
+4. `Habit Synergy Tracker`: Pelacakan kebiasaan harian dan evaluasi mingguan.
+5. `Intelligence Dashboard`: Ringkasan performa, heatmap, radar evaluasi, dan laporan PDF.
 
-## Expanding the ESLint configuration
+## Fitur Pendukung
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Profil pengguna lokal.
+- Pengaturan preferensi aplikasi.
+- Cognitive guard (jeda napas terstruktur saat overload).
+- Backup/restore data lokal (JSON).
+
+## Teknologi
+
+- React 19 + Vite 7
+- TailwindCSS
+- Framer Motion
+- Chart.js + react-chartjs-2
+- @hello-pangea/dnd
+- html2pdf.js
+- Vite PWA
+
+## Arsitektur Penyimpanan
+
+Seluruh data disimpan di `localStorage` browser (tanpa backend/database server).
+
+Key utama:
+
+- `stuprod_user`
+- `stuprod_profileInfo`
+- `stuprod_settings`
+- `zen_pages_multi`
+- `matrix_tasks`
+- `stuprod_tasks`
+- `time_blocks`
+- `stuprod_habits_v4`
+- `forest_stats`
+- `stuprod_radar_scores`
+
+## Menjalankan Proyek
+
+```bash
+npm install
+npm run dev
+```
+
+Build produksi:
+
+```bash
+npm run build
+npm run preview
+```
+
+## Deployment
+
+Vercel
+- Repository URL: `https://github.com/<username>/<repo>`
+- Hosting URL: `https://<project>.vercel.app`
+
+## Kepatuhan Rulebook (Ringkas)
+
+- Frontend-only: Ya
+- Tanpa backend framework terlarang: Ya
+- Website sudah dapat di-hosting statis: Ya
+- Fitur utama produktivitas: 5 fitur
+- Source code + hosting link: disiapkan melalui repository dan deployment
+
+## Catatan Presentasi Final
+
+Untuk sesi final 10 menit presentasi + 10 menit tanya jawab:
+
+1. Jelaskan masalah produktivitas mahasiswa yang disasar.
+2. Demo alur lintas fitur dari Notes -> Matrix -> Kalender -> Dashboard.
+3. Tunjukkan value desain (warna, struktur, dan alasan UX).
+4. Tunjukkan reliability (autosave, local-first, backup/restore).
