@@ -89,15 +89,21 @@ const TimeManager = () => {
   // === STATE JADWAL AKADEMIK ===
   const [academicSchedule, setAcademicSchedule] = useState(() => getJson("stuprod_academic_schedule", []));
   const [showAcademicModal, setShowAcademicModal] = useState(false);
-  // DITAMBAHKAN: Field SKS dan Location
   const [newClass, setNewClass] = useState({ dayOfWeek: 1, course: "", startTime: "08:00", endTime: "09:40", sks: 2, location: "" });
 
+  // PENGAMAN GLOBAL GOAL (HARDENING)
   const [globalGoal, setGlobalGoal] = useState(() => {
     return localStorage.getItem("stuprod_global_goal") || "Ketik target IPK/Organisasimu semester ini...";
   });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
 
-  useEffect(() => { localStorage.setItem("stuprod_global_goal", globalGoal); }, [globalGoal]);
+  // FUNGSI KHUSUS UNTUK MENYIMPAN GLOBAL GOAL DENGAN AMAN
+  const saveGlobalGoal = (newGoal) => {
+    setGlobalGoal(newGoal);
+    // Menggunakan localStorage biasa tapi disusul dispatchEvent agar NekoGuide terbangun!
+    localStorage.setItem("stuprod_global_goal", newGoal);
+    window.dispatchEvent(new Event('storage'));
+  };
 
   const [notif, setNotif] = useState(null);
   const [appSettings, setAppSettings] = useState(() => getJson("stuprod_settings", {}));
@@ -336,7 +342,7 @@ const TimeManager = () => {
               scheduledBlocks={scheduledBlocks} getDayFormatted={getDayFormatted} todayBlocks={todayBlocks}
               isBurnout={isBurnout} currentDailyEnergy={currentDailyEnergy} MAX_DAILY_ENERGY={MAX_DAILY_ENERGY}
               synergyState={synergyState} tasks={tasks} quadrants={quadrants} removeBlock={removeBlock}
-              dateStrKey={dateStrKey} globalGoal={globalGoal} setGlobalGoal={setGlobalGoal} isEditingGoal={isEditingGoal}
+              dateStrKey={dateStrKey} globalGoal={globalGoal} setGlobalGoal={saveGlobalGoal} isEditingGoal={isEditingGoal}
               setIsEditingGoal={setIsEditingGoal} academicSchedule={academicSchedule}
             />
 
@@ -382,7 +388,7 @@ const TimeManager = () => {
                       <input type="time" required value={newClass.endTime} onChange={(e) => setNewClass({ ...newClass, endTime: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white [color-scheme:light] dark:[color-scheme:dark]" />
                     </div>
                   </div>
-                  {/* DITAMBAHKAN: INPUT SKS & LOKASI */}
+                  {/* INPUT SKS & LOKASI */}
                   <div className="grid grid-cols-2 gap-4 sm:col-span-2 mt-1">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Jumlah SKS</label>

@@ -1,11 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check } from 'lucide-react';
 import { NekoMascotMini } from './NekoMascot';
+import { getJson } from '../utils/storage';
 
 export default function NekoGuide() {
   const [step, setStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+
+  // Fungsi untuk mengecek progress dipisah menggunakan useCallback agar stabil
+  const checkProgress = useCallback(() => {
+    if (localStorage.getItem('stuprod_guide_finished')) {
+      setIsVisible(false);
+      return;
+    }
+
+    // Ambil data real-time menggunakan getJson yang aman (Hardening Level Senior)
+    const notes = getJson('zen_pages_multi', []);
+    const mTasks = getJson('matrix_tasks', []);
+    const dTasks = getJson('stuprod_tasks', []);
+    const timeBlocks = getJson('time_blocks', {});
+    const habits = getJson('stuprod_habits_v4', []);
+    const profile = getJson('stuprod_profileInfo', {});
+    const goal = localStorage.getItem('stuprod_global_goal');
+
+    let currentStep = 1;
+
+    // Misi 1: Bikin Catatan Pertama (Minimal 5 karakter)
+    if (notes.length > 1 || (notes[0] && notes[0].content.length > 5)) {
+      currentStep = 2;
+    }
+
+    // Misi 2: Bikin Tugas di Balance Matrix
+    if (currentStep === 2 && (mTasks.length > 0 || dTasks.length > 0)) {
+      currentStep = 3;
+    }
+
+    // Misi 3: Jadwalkan Tugas ke Kalender
+    if (currentStep === 3 && Object.keys(timeBlocks).length > 0) {
+      currentStep = 4;
+    }
+
+    // Misi 4: Bikin Habit
+    if (currentStep === 4 && habits.length > 0) {
+      currentStep = 5;
+    }
+
+    // Misi 5: Update Profile / Set Global Goal
+    if (currentStep === 5 && (Object.keys(profile).length > 0 || goal)) {
+      currentStep = 6;
+    }
+
+    // Pastikan step tidak mundur (hanya maju)
+    setStep(prev => (currentStep > prev ? currentStep : prev));
+  }, []);
 
   useEffect(() => {
     // Cek jika user sudah menyelesaikan onboarding sebelumnya
@@ -13,63 +61,19 @@ export default function NekoGuide() {
     if (isFinished) return;
 
     // Tunda kemunculan 1.5 detik agar animasi aplikasi selesai dulu
-    const initTimer = setTimeout(() => setIsVisible(true), 1500);
+    const initTimer = setTimeout(() => {
+      setIsVisible(true);
+      checkProgress(); // Cek progress pertama kali saat Neko muncul
+    }, 1500);
 
-    const checkProgress = () => {
-      if (localStorage.getItem('stuprod_guide_finished')) {
-        setIsVisible(false);
-        return;
-      }
-
-      // Ambil data real-time dari LocalStorage
-      const notes = JSON.parse(localStorage.getItem('zen_pages_multi') || '[]');
-      const mTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
-      const dTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
-      const timeBlocks = JSON.parse(localStorage.getItem('time_blocks') || '{}');
-      const habits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
-      const profile = JSON.parse(localStorage.getItem('stuprod_profileInfo') || '{}');
-      const goal = localStorage.getItem('stuprod_global_goal');
-
-      let currentStep = 1;
-
-      // Misi 1: Bikin Catatan Pertama (Minimal 5 karakter)
-      if (notes.length > 1 || (notes[0] && notes[0].content.length > 5)) {
-        currentStep = 2;
-      }
-
-      // Misi 2: Bikin Tugas di Balance Matrix
-      if (currentStep === 2 && (mTasks.length > 0 || dTasks.length > 0)) {
-        currentStep = 3;
-      }
-
-      // Misi 3: Jadwalkan Tugas ke Kalender
-      if (currentStep === 3 && Object.keys(timeBlocks).length > 0) {
-        currentStep = 4;
-      }
-
-      // Misi 4: Bikin Habit
-      if (currentStep === 4 && habits.length > 0) {
-        currentStep = 5;
-      }
-
-      // Misi 5: Update Profile / Set Global Goal
-      if (currentStep === 5 && (Object.keys(profile).length > 0 || goal)) {
-        currentStep = 6;
-      }
-
-      // Pastikan step tidak mundur (hanya maju)
-      setStep(prev => (currentStep > prev ? currentStep : prev));
-    };
-
-    checkProgress();
-    // Neko akan memantau progres setiap 1 detik!
-    const interval = setInterval(checkProgress, 1000);
+    // MENGHAPUS BOM WAKTU PERFORMA: setInterval diganti dengan Event Listener!
+    window.addEventListener('storage', checkProgress);
 
     return () => {
       clearTimeout(initTimer);
-      clearInterval(interval);
+      window.removeEventListener('storage', checkProgress);
     };
-  }, []);
+  }, [checkProgress]);
 
   const completeGuide = () => {
     setStep(7); // Masuk ke state selebrasi (Purr-fect!)
@@ -139,11 +143,10 @@ export default function NekoGuide() {
               </div>
             )}
             
-            {/* Segitiga panah chat (disesuaikan posisinya agar pas menunjuk ke kepala Neko yang sudah dibesarkan) */}
+            {/* Segitiga panah chat */}
             <div className="absolute -bottom-3 right-10 w-0 h-0 border-l-[14px] border-l-transparent border-r-[14px] border-r-transparent border-t-[14px] border-t-white dark:border-t-slate-800 drop-shadow-md" />
           </motion.div>
 
-          {/* Neko Mascot (Ukurannya Dibesarkan dan Dimirror) */}
           {/* Neko Mascot (Ukurannya Dibesarkan dan Dimirror) */}
           <div className="mr-4 pointer-events-auto cursor-pointer hover:scale-105 transition-transform">
             {/* WRAPPER ANIMASI: Menangani naik-turun (float/bounce) */}

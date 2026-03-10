@@ -9,6 +9,9 @@ import LandingPage from './components/LandingPage';
 import CognitiveGuard from './components/CognitiveGuard';
 import NekoGuide from './components/NekoGuide';
 
+// IMPORT STORAGE TINGKAT DEWA
+import { getJson } from './utils/storage';
+
 // LAZY LOADING KOMPONEN DASHBOARD DLL
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const ZenNotes = lazy(() => import('./components/ZenNotes'));
@@ -23,10 +26,7 @@ const MotionDiv = motion.div;
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('stuprod_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState(() => getJson('stuprod_user', null));
 
   // STATE UNTUK MENGONTROL ROUTING LANDING PAGE VS LOGIN
   const [showLanding, setShowLanding] = useState(true);
@@ -44,8 +44,10 @@ function App() {
   const [profileAvatar, setProfileAvatar] = useState('');
   const [profileUsername, setProfileUsername] = useState('');
 
+  // STATE ONBOARDING STATIS KEMBALI DIHADIRKAN
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchDrop, setShowSearchDrop] = useState(false);
@@ -53,25 +55,23 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [footerModal, setFooterModal] = useState(null);
 
-  const getSettings = () => JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+  const getSettings = () => getJson('stuprod_settings', {});
 
   // INIT DARK MODE & GLOBAL DATA
   const loadGlobalData = useCallback(() => {
-    const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+    const settings = getJson('stuprod_settings', {});
     if (settings.darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
 
-    const habits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
-    const focusStats = JSON.parse(localStorage.getItem('forest_stats') || '{"planted":0}');
+    const habits = getJson('stuprod_habits_v4', []);
+    const focusStats = getJson('forest_stats', { planted: 0 });
     const totalExp = (habits.reduce((acc, h) => acc + (h.streak || 0), 0) * 10) + ((focusStats.planted || 0) * 25);
     setUserExp(totalExp);
     setUserLevel(Math.floor(totalExp / 100) + 1);
 
-    // Ambil Data Foto dan Username untuk Sidebar
-    const pInfo = JSON.parse(localStorage.getItem('stuprod_profileInfo') || '{}');
+    const pInfo = getJson('stuprod_profileInfo', {});
     setProfileAvatar(pInfo.avatar || '');
 
-    // Default Username jika pInfo.username kosong: hapus spasi dari nama user
     const fallbackUsername = user?.name ? user.name.toLowerCase().replace(/\s+/g, '') : 'student';
     setProfileUsername(pInfo.username || fallbackUsername);
   }, [user]);
@@ -86,15 +86,17 @@ function App() {
     }
   }, [loadGlobalData]);
 
+  // NAVIGASI GLOBAL
   useEffect(() => {
     const handleGlobalNav = (e) => {
       setActiveMenu(e.detail);
-      setIsSidebarOpen(false); // Tutup sidebar otomatis di versi mobile
+      setIsSidebarOpen(false);
     };
     window.addEventListener('navigate', handleGlobalNav);
     return () => window.removeEventListener('navigate', handleGlobalNav);
   }, []);
 
+  // LOGIKA MUNCULNYA ONBOARDING STATIS
   useEffect(() => {
     const onboarded = localStorage.getItem('stuprod_onboarded_v1');
     if (!onboarded && user) setShowOnboarding(true);
@@ -105,24 +107,31 @@ function App() {
     setShowOnboarding(false);
   };
 
+  // SISTEM PENCARIAN
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]); setShowSearchDrop(false); return;
     }
     const q = searchQuery.toLowerCase();
     let results = [];
-    const notes = JSON.parse(localStorage.getItem('zen_pages_multi') || '[]');
+    
+    const notes = getJson('zen_pages_multi', []);
     notes.forEach(n => { if (n.title.toLowerCase().includes(q)) results.push({ type: 'Catatan', title: n.title, action: 'zennotes' }) });
-    const mTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
+    
+    const mTasks = getJson('matrix_tasks', []);
     mTasks.forEach(t => { if (t.title.toLowerCase().includes(q)) results.push({ type: 'Tugas', title: t.title, action: 'time_manager' }) });
-    const dTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
+    
+    const dTasks = getJson('stuprod_tasks', []);
     dTasks.forEach(t => { if (t.text && t.text.toLowerCase().includes(q)) results.push({ type: 'Deadline', title: t.text, action: 'time_manager' }) });
-    const hData = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
+    
+    const hData = getJson('stuprod_habits_v4', []);
     hData.forEach(h => { if (h.title.toLowerCase().includes(q)) results.push({ type: 'Habit', title: h.title, action: 'habits' }) });
+    
     setSearchResults(results.slice(0, 5));
     setShowSearchDrop(true);
   }, [searchQuery]);
 
+  // SISTEM NOTIFIKASI
   useEffect(() => {
     const checkNotifs = () => {
       const settings = getSettings();
@@ -135,7 +144,7 @@ function App() {
       const now = new Date().getTime();
 
       if (settings.urgentReminders !== false) {
-        const dTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
+        const dTasks = getJson('stuprod_tasks', []);
         dTasks.forEach(t => {
           if (!t.completed && t.deadline) {
             const diff = new Date(t.deadline).getTime() - now;
@@ -145,7 +154,7 @@ function App() {
       }
 
       if (settings.habitReminders !== false) {
-        const habits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
+        const habits = getJson('stuprod_habits_v4', []);
         const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         const dateStr = d.toISOString().split('T')[0];
         let pendingHabits = 0;
@@ -164,16 +173,11 @@ function App() {
     };
   }, [activeMenu]);
 
-
-  // =========================================================
-  // ROUTING LOGIC: LANDING PAGE -> LOGIN -> DASHBOARD
-  // =========================================================
+  // ROUTING LOGIC
   if (!user) {
     if (showLanding) {
-      // Jika pengguna baru pertama kali datang, tampilkan Landing Page Find IT style
       return <LandingPage onStart={() => setShowLanding(false)} />;
     } else {
-      // Jika tombol 'Register/Login' ditekan, tampilkan form Login
       return (
         <div className="relative min-h-screen bg-[#050814] text-slate-300">
           <button 
@@ -191,7 +195,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('stuprod_user');
     setUser(null);
-    setShowLanding(true); // Kembali ke landing page saat logout
+    setShowLanding(true);
   };
 
   const renderContent = () => {
@@ -396,14 +400,16 @@ function App() {
           <div className="flex flex-col md:flex-row items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 max-w-7xl mx-auto">
             <div>&copy; {new Date().getFullYear()} Stu<span className="text-indigo-600 dark:text-indigo-400">Prod</span>. All rights reserved.</div>
             <div className="flex items-center gap-4 mt-2 md:mt-0">
-              <button onClick={() => setFooterModal('privacy')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Privacy</button>
-              <button onClick={() => setFooterModal('terms')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Terms</button>
-              <button onClick={() => setFooterModal('help')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Help Center</button>
+              <button onClick={() => setFooterModal('privacy')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer">Privacy</button>
+              <button onClick={() => setFooterModal('terms')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer">Terms</button>
+              <button onClick={() => setFooterModal('help')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer">Help Center</button>
             </div>
           </div>
         </footer>
 
-        {/* Onboarding Modal */}
+        {/* ============================================== */}
+        {/* MODAL ONBOARDING STATIS (PERTAMA KALI LOGIN) */}
+        {/* ============================================== */}
         {showOnboarding && createPortal(
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in">
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden animate-fade-in-up border border-indigo-100 dark:border-slate-700">
@@ -498,7 +504,8 @@ function App() {
           </div>
           , document.body)}
           
-          {user && <NekoGuide />}
+        {/* MUNCULKAN NEKO GUIDE HANYA SETELAH ONBOARDING STATIS SELESAI */}
+        {user && !showOnboarding && <NekoGuide />}
       </main>
     </div>
   );

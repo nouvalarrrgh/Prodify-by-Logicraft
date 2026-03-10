@@ -37,7 +37,8 @@ const WeeklyCalendar = ({
             <button
               key={idx}
               onClick={() => setCurrentDate(day)}
-              className={`flex-1 min-w-[72px] flex flex-col items-center p-3 rounded-2xl transition-all cursor-pointer ${isSelected ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/50 scale-[1.03]" : "bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"}`}
+              // THE FIX: flex-1 max-w-[120px] agar mengisi kekosongan tapi tidak kepanjangan di monitor besar
+              className={`flex-1 min-w-[72px] max-w-[120px] flex flex-col items-center p-3 rounded-2xl transition-all cursor-pointer ${isSelected ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/50 scale-[1.03]" : "bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"}`}
             >
               <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? "text-indigo-200" : "text-slate-400 dark:text-slate-500"}`}>
                 {day.toLocaleDateString("id-ID", { weekday: "short" })}
@@ -165,7 +166,7 @@ const WeeklyCalendar = ({
                             </h4>
                           </div>
                           
-                          {/* DITAMBAHKAN: BUBBLE SKS DAN RUANG KELAS */}
+                          {/* BUBBLE SKS DAN RUANG KELAS */}
                           <div className="flex flex-wrap items-center gap-2 mt-1.5">
                             <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-200 bg-white/60 dark:bg-black/30 px-2 py-0.5 rounded-md backdrop-blur-sm flex items-center gap-1">
                               <BookOpen className="w-3 h-3" /> Kuliah

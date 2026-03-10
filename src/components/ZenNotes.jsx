@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { NekoMascotMini } from './NekoMascot';
+import { getJson, setJson } from '../utils/storage';
 
 const ZenNotes = () => {
   const [pages, setPages] = useState(() => {
@@ -417,22 +418,21 @@ const ZenNotes = () => {
   };
 
   const saveToMatrix = () => {
-    const cleanText = selectedText.trim();
-    if (!cleanText) return;
-    const existingTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
-    // Jika panel project sedang terbuka, otomatis jadikan ini sebagai Task Project
-    const taskCategory = showProjectPanel ? 'project' : 'academic'; 
-    const newTask = { id: Date.now().toString(), title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false };
-    
-    localStorage.setItem('matrix_tasks', JSON.stringify([...existingTasks, newTask]));
-    window.dispatchEvent(new Event('storage'));
-    
-    setSaveStatus('Tugas Ditambahkan!');
-    setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
-    setShowTaskPopup(false);
-    setSelectedText('');
-    window.getSelection().removeAllRanges();
-  };
+  const cleanText = selectedText.trim();
+  if (!cleanText) return;
+
+  const existingTasks = getJson('matrix_tasks', []);
+  const taskCategory = showProjectPanel ? 'project' : 'academic'; 
+  const newTask = { id: Date.now().toString(), title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false };
+
+  setJson('matrix_tasks', [...existingTasks, newTask]); // ELEGAN DAN OTOMATIS SYNC!
+
+  setSaveStatus('Tugas Ditambahkan!');
+  setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
+  setShowTaskPopup(false);
+  setSelectedText('');
+  window.getSelection().removeAllRanges();
+};
 
   const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
   const editorClasses = `w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} ${pageOrientation === 'potrait' ? 'max-w-[816px]' : 'max-w-[1056px]'}`;
