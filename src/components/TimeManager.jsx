@@ -6,7 +6,7 @@ import { DragDropContext } from "@hello-pangea/dnd";
 // SATUKAN SEMUA IMPORT ICON KE DALAM SATU BARIS INI:
 import { 
   Plus, CheckCircle, Target, MoveRight, Layers, Clock, BellRing,
-  AlertTriangle, AlertCircle, Trash2 
+  AlertTriangle, AlertCircle, Trash2, Calendar, X, MapPin
 } from "lucide-react";
 
 // Import Komponen Anak yang sudah dipecah
@@ -14,23 +14,18 @@ import DeadlineTracker from "./TimeManager/DeadlineTracker";
 import WeeklyCalendar from "./TimeManager/WeeklyCalendar";
 import EisenhowerMatrix from "./TimeManager/EisenhowerMatrix";
 
+// IMPORT STORAGE DAN CUSTOM HOOK LEVEL DEWA
+import { getJson, setJson } from '../utils/storage';
+import { useSynergyState } from '../hooks/useSynergyState';
+
 const VALID_QUADRANTS = [
-  "urgent-important",
-  "not-urgent-important",
-  "urgent-not-important",
-  "not-urgent-not-important",
-  "unassigned",
+  "urgent-important", "not-urgent-important", "urgent-not-important", "not-urgent-not-important", "unassigned",
 ];
 
 const LEGACY_QUADRANT_MAP = {
-  q1: "urgent-important",
-  q2: "not-urgent-important",
-  q3: "urgent-not-important",
-  q4: "not-urgent-not-important",
-  "urgent-academic": "unassigned",
+  q1: "urgent-important", q2: "not-urgent-important", q3: "urgent-not-important", q4: "not-urgent-not-important", "urgent-academic": "unassigned",
 };
 
-// KATEGORI PERAN MAHASISWA UNTUK SETIAP TUGAS / BLOK WAKTU
 const CATEGORY_OPTIONS = [
   { id: "academic", label: "Akademik", short: "Akademik" },
   { id: "organization", label: "Organisasi", short: "Organisasi" },
@@ -59,18 +54,13 @@ const createId = () =>
     : `id_${Math.floor(Math.random() * 1e9)}`;
 
 const TimeManager = () => {
-  // --- 1. STATE MANAGEMENT (Tetap sama) ---
+  const { energyCoins: MAX_DAILY_ENERGY, balanceState: synergyState } = useSynergyState();
+
   const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem("matrix_tasks");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.map((t) => ({
-        ...t,
-        quadrant: normalizeQuadrant(t.quadrant),
-        category: t.category || getDefaultCategory(),
-      }));
-    }
-    return [];
+    const saved = getJson("matrix_tasks", []);
+    return saved.map((t) => ({
+      ...t, quadrant: normalizeQuadrant(t.quadrant), category: t.category || getDefaultCategory(),
+    }));
   });
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -79,58 +69,41 @@ const TimeManager = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  
   const [scheduledBlocks, setScheduledBlocks] = useState(() => {
-    const saved = localStorage.getItem("time_blocks");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const migrated = {};
-      for (const date in parsed) {
-        migrated[date] = parsed[date].map((b) => ({
-          ...b,
-          quadrant: normalizeQuadrant(b.quadrant),
-          category: b.category || getDefaultCategory(),
-        }));
-      }
-      return migrated;
+    const parsed = getJson("time_blocks", {});
+    const migrated = {};
+    for (const date in parsed) {
+      migrated[date] = parsed[date].map((b) => ({
+        ...b, quadrant: normalizeQuadrant(b.quadrant), category: b.category || getDefaultCategory(),
+      }));
     }
-    return {};
+    return migrated;
   });
+
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [taskToSchedule, setTaskToSchedule] = useState(null);
   const [scheduleTime, setScheduleTime] = useState("08:00");
   const [scheduleDate, setScheduleDate] = useState(getLocalDateKey());
-  const [academicSchedule, setAcademicSchedule] = useState(() => {
-    try {
-      const raw = localStorage.getItem("stuprod_academic_schedule");
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  
+  // === STATE JADWAL AKADEMIK ===
+  const [academicSchedule, setAcademicSchedule] = useState(() => getJson("stuprod_academic_schedule", []));
+  const [showAcademicModal, setShowAcademicModal] = useState(false);
+  // DITAMBAHKAN: Field SKS dan Location
+  const [newClass, setNewClass] = useState({ dayOfWeek: 1, course: "", startTime: "08:00", endTime: "09:40", sks: 2, location: "" });
 
   const [globalGoal, setGlobalGoal] = useState(() => {
     return localStorage.getItem("stuprod_global_goal") || "Ketik target IPK/Organisasimu semester ini...";
   });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem("stuprod_global_goal", globalGoal);
-  }, [globalGoal]);
+  useEffect(() => { localStorage.setItem("stuprod_global_goal", globalGoal); }, [globalGoal]);
 
   const [notif, setNotif] = useState(null);
-  const [appSettings, setAppSettings] = useState(() => JSON.parse(localStorage.getItem("stuprod_settings") || "{}"));
+  const [appSettings, setAppSettings] = useState(() => getJson("stuprod_settings", {}));
   const notifyAudioRef = useRef(null);
 
-  const [synergyState, setSynergyState] = useState(() => {
-    return localStorage.getItem("stuprod_balance_state") || "balanced";
-  });
-
-  const MAX_DAILY_ENERGY = synergyState === "buffed" ? 13 : synergyState === "debuffed" ? 7 : 10;
-
-  const [deadlineTasks, setDeadlineTasks] = useState(() => {
-    const saved = localStorage.getItem("stuprod_tasks");
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [deadlineTasks, setDeadlineTasks] = useState(() => getJson("stuprod_tasks", []));
   const [newDeadlineTask, setNewDeadlineTask] = useState("");
   const [newDeadlineTime, setNewDeadlineTime] = useState("");
   const [activeAlert, setActiveAlert] = useState(null);
@@ -144,7 +117,6 @@ const TimeManager = () => {
     setActiveAlert(task);
   }, [appSettings]);
 
-  // --- 2. EFFECTS (Tetap sama) ---
   useEffect(() => {
     notifyAudioRef.current = new Audio("https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3");
     return () => {
@@ -155,38 +127,22 @@ const TimeManager = () => {
     };
   }, []);
 
+  // PERBAIKAN BUG INFINITE LOOP
   useEffect(() => {
-    const syncSettings = () => {
-      setAppSettings(JSON.parse(localStorage.getItem("stuprod_settings") || "{}"));
-      setSynergyState(localStorage.getItem("stuprod_balance_state") || "balanced");
+    const syncSettings = () => setAppSettings(getJson("stuprod_settings", {}));
+    const handleStorage = (e) => {
+      if (!e.key || e.key === "stuprod_settings") syncSettings();
     };
-    const syncSchedule = () => {
-      try {
-        const raw = localStorage.getItem("stuprod_academic_schedule");
-        setAcademicSchedule(raw ? JSON.parse(raw) : []);
-      } catch {
-        setAcademicSchedule([]);
-      }
-    };
-    window.addEventListener("storage", (e) => {
-      if (e.key === "stuprod_settings" || e.key === "stuprod_balance_state") {
-        syncSettings();
-      }
-      if (!e.key || e.key === "stuprod_academic_schedule") {
-        syncSchedule();
-      }
-    });
-    // initial sync
+    window.addEventListener("storage", handleStorage);
     syncSettings();
-    syncSchedule();
-    return () => {
-      window.removeEventListener("storage", syncSettings);
-    };
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("stuprod_tasks", JSON.stringify(deadlineTasks));
-  }, [deadlineTasks]);
+  // AUTO SAVES
+  useEffect(() => { setJson("stuprod_tasks", deadlineTasks); }, [deadlineTasks]);
+  useEffect(() => { setJson("matrix_tasks", tasks); }, [tasks]);
+  useEffect(() => { setJson("time_blocks", scheduledBlocks); }, [scheduledBlocks]);
+  useEffect(() => { setJson("stuprod_academic_schedule", academicSchedule); }, [academicSchedule]);
 
   useEffect(() => {
     const notifEnabled = appSettings.notifications !== false && appSettings.urgentReminders !== false;
@@ -207,48 +163,45 @@ const TimeManager = () => {
         }
         return t;
       });
-      if (updated) {
-        setDeadlineTasks(newTasks);
-      }
+      if (updated) setDeadlineTasks(newTasks);
     };
 
     const interval = setInterval(checkDeadlines, 30000);
     return () => clearInterval(interval);
   }, [deadlineTasks, appSettings, triggerNotification]);
 
-  // --- HANDLERS (Tetap sama) ---
+  // --- HANDLERS JADWAL AKADEMIK ---
+  const handleAddClass = (e) => {
+    e.preventDefault();
+    if (!newClass.course.trim()) return;
+    const addedClass = { ...newClass, id: createId(), dayOfWeek: parseInt(newClass.dayOfWeek, 10) };
+    setAcademicSchedule([...academicSchedule, addedClass]);
+    // Reset state
+    setNewClass({ dayOfWeek: 1, course: "", startTime: "08:00", endTime: "09:40", sks: 2, location: "" });
+    showNotification("Mata Kuliah berhasil ditambahkan!");
+  };
+
+  const removeClass = (id) => {
+    setAcademicSchedule(academicSchedule.filter((c) => c.id !== id));
+  };
+
+  // --- HANDLERS TUGAS ---
   const handleAddDeadlineTask = (e) => {
     e.preventDefault();
     if (!newDeadlineTask.trim() || !newDeadlineTime) return;
-    setDeadlineTasks([
-      ...deadlineTasks,
-      { id: createId(), text: newDeadlineTask, deadline: newDeadlineTime, completed: false, completedAt: null, notified: false, createdAt: new Date().toISOString() },
-    ]);
-    setNewDeadlineTask("");
-    setNewDeadlineTime("");
+    setDeadlineTasks([...deadlineTasks, { id: createId(), text: newDeadlineTask, deadline: newDeadlineTime, completed: false, completedAt: null, notified: false, createdAt: new Date().toISOString() }]);
+    setNewDeadlineTask(""); setNewDeadlineTime("");
   };
 
   const toggleDeadlineTask = (id) => {
-    setDeadlineTasks(
-      deadlineTasks.map((t) => t.id === id ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null } : t)
-    );
+    setDeadlineTasks(deadlineTasks.map((t) => t.id === id ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null } : t));
   };
 
   const deleteDeadlineTask = (id) => setDeadlineTasks(deadlineTasks.filter((t) => t.id !== id));
 
   const transferDeadlineTask = (dt) => {
-    const newTask = { 
-      id: createId(), 
-      title: dt.text, 
-      quadrant: "unassigned", 
-      energy: 2, 
-      tag: "Deadline", 
-      completed: false,
-      category: getDefaultCategory(),
-    };
-    setTasks([...tasks, newTask]);
-    setTaskToSchedule(newTask);
-    setShowScheduleModal(true);
+    const newTask = { id: createId(), title: dt.text, quadrant: "unassigned", energy: 2, tag: "Deadline", completed: false, category: getDefaultCategory() };
+    setTasks([...tasks, newTask]); setTaskToSchedule(newTask); setShowScheduleModal(true);
     showNotification("Tugas dikirim ke Agenda & Kalender!");
   };
 
@@ -260,13 +213,7 @@ const TimeManager = () => {
     return { label: "Aman", color: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-200 dark:border-emerald-500/30", bg: "bg-emerald-50 dark:bg-emerald-500/10" };
   };
 
-  useEffect(() => { localStorage.setItem("matrix_tasks", JSON.stringify(tasks)); }, [tasks]);
-  useEffect(() => { localStorage.setItem("time_blocks", JSON.stringify(scheduledBlocks)); }, [scheduledBlocks]);
-
-  const showNotification = (message) => {
-    setNotif(message);
-    setTimeout(() => setNotif(null), 3000);
-  };
+  const showNotification = (message) => { setNotif(message); setTimeout(() => setNotif(null), 3000); };
 
   const clearCompletedTasks = () => {
     setTasks(tasks.filter((t) => !t.completed));
@@ -277,22 +224,9 @@ const TimeManager = () => {
   const handleAddTask = (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-    const newTask = { 
-      id: createId(), 
-      title: newTaskTitle, 
-      quadrant: "unassigned", 
-      energy: parseInt(newTaskEnergy), 
-      tag: "Umum", 
-      completed: false,
-      category: newTaskCategory || getDefaultCategory(),
-    };
-    setTasks([...tasks, newTask]);
-    setNewTaskTitle("");
-    setNewTaskEnergy("1");
-    setNewTaskCategory(getDefaultCategory());
-    setShowAddModal(false);
-    setTaskToSchedule(newTask);
-    setShowScheduleModal(true);
+    const newTask = { id: createId(), title: newTaskTitle, quadrant: "unassigned", energy: parseInt(newTaskEnergy), tag: "Umum", completed: false, category: newTaskCategory || getDefaultCategory() };
+    setTasks([...tasks, newTask]); setNewTaskTitle(""); setNewTaskEnergy("1"); setNewTaskCategory(getDefaultCategory());
+    setShowAddModal(false); setTaskToSchedule(newTask); setShowScheduleModal(true);
   };
 
   const toggleTaskStatus = (taskId) => {
@@ -323,32 +257,17 @@ const TimeManager = () => {
   };
 
   const openScheduleModal = (task) => {
-    setTaskToSchedule({ ...task });
-    setScheduleTime("08:00");
-    setScheduleDate(getLocalDateKey());
-    setShowScheduleModal(true);
+    setTaskToSchedule({ ...task }); setScheduleTime("08:00"); setScheduleDate(getLocalDateKey()); setShowScheduleModal(true);
   };
 
   const confirmSchedule = (e) => {
     e.preventDefault();
     if (!taskToSchedule || !scheduleDate || !scheduleTime) return;
     const dateStr = scheduleDate;
-    const newBlock = { 
-      id: createId(), 
-      taskId: taskToSchedule.id, 
-      title: taskToSchedule.title, 
-      time: scheduleTime || "00:00", 
-      quadrant: taskToSchedule.quadrant || "unassigned", 
-      energy: taskToSchedule.energy || 1, 
-      completed: false,
-      category: taskToSchedule.category || getDefaultCategory(),
-    };
-    setScheduledBlocks({
-      ...scheduledBlocks,
-      [dateStr]: [...(scheduledBlocks[dateStr] || []), newBlock].sort((a, b) => a.time.localeCompare(b.time)),
-    });
+    const newBlock = { id: createId(), taskId: taskToSchedule.id, title: taskToSchedule.title, time: scheduleTime || "00:00", quadrant: taskToSchedule.quadrant || "unassigned", energy: taskToSchedule.energy || 1, completed: false, category: taskToSchedule.category || getDefaultCategory() };
+    setScheduledBlocks({ ...scheduledBlocks, [dateStr]: [...(scheduledBlocks[dateStr] || []), newBlock].sort((a, b) => a.time.localeCompare(b.time)) });
     setShowScheduleModal(false);
-    showNotification(`Tugas dijadwalkan pada jam ${scheduleTime} `);
+    showNotification(`Tugas dijadwalkan pada jam ${scheduleTime}`);
     setTimeout(() => setTaskToSchedule(null), 300);
   };
 
@@ -363,27 +282,13 @@ const TimeManager = () => {
     { id: "not-urgent-not-important", title: "Tunda/Hapus", icon: Trash2, color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-50 dark:bg-slate-800/50", border: "border-slate-200 dark:border-slate-700" },
   ];
 
-  const getDayFormatted = (date) => {
-    return date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  };
-
+  const getDayFormatted = (date) => { return date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); };
   const dateStrKey = getLocalDateKey(currentDate);
   const todayBlocks = scheduledBlocks[dateStrKey] || [];
-
-  const next7Days = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-
-  const isSameDay = (date1, date2) => {
-    return (date1.getFullYear() === date2.getFullYear() && date1.getMonth() === date2.getMonth() && date1.getDate() === date2.getDate());
-  };
-
-  const calculateDailyEnergy = (blocks) => {
-    return blocks.reduce((acc, block) => acc + (block.energy || 1), 0);
-  };
-
+  const next7Days = Array.from({ length: 7 }).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+  const isSameDay = (date1, date2) => { return (date1.getFullYear() === date2.getFullYear() && date1.getMonth() === date2.getMonth() && date1.getDate() === date2.getDate()); };
+  const calculateDailyEnergy = (blocks) => { return blocks.reduce((acc, block) => acc + (block.energy || 1), 0); };
+  
   const currentDailyEnergy = calculateDailyEnergy(todayBlocks);
   const isBurnout = currentDailyEnergy > MAX_DAILY_ENERGY;
 
@@ -391,7 +296,7 @@ const TimeManager = () => {
     <>
       <div className="min-h-full flex flex-col p-4 md:p-8 animate-fade-in pb-32">
         <div className="w-full max-w-6xl mx-auto space-y-8">
-          {/* HEADER */}
+          
           <div className="animated-gradient-border liquid-glass dark:bg-slate-900/60 dark:border-slate-700/50 p-6 md:p-8 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 spatial-shadow transition-colors">
             <div className="flex items-center gap-5 z-10 relative">
               <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-500/20 rounded-2xl flex items-center justify-center border-2 border-indigo-200 dark:border-indigo-500/30 shadow-inner">
@@ -402,76 +307,166 @@ const TimeManager = () => {
                 <p className="text-slate-500 dark:text-slate-400 font-medium text-sm mt-1">Prioritaskan di Matrix, Eksekusi di Kalender.</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-6 py-3.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md shadow-indigo-600/20 w-full md:w-auto justify-center cursor-pointer"
-            >
-              <Plus className="w-5 h-5" /> Tambah Agenda Baru
-            </button>
+            
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto relative z-10">
+              <button
+                onClick={() => setShowAcademicModal(true)}
+                className="flex items-center justify-center gap-2 px-5 py-3.5 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-xl font-bold hover:bg-indigo-50 dark:hover:bg-slate-700 transition-all shadow-sm cursor-pointer"
+              >
+                <Calendar className="w-5 h-5" /> Jadwal Kuliah
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+              >
+                <Plus className="w-5 h-5" /> Tambah Agenda Baru
+              </button>
+            </div>
           </div>
 
-          {/* RENDER MODULAR COMPONENTS */}
           <DeadlineTracker
-            deadlineTasks={deadlineTasks}
-            newDeadlineTask={newDeadlineTask}
-            setNewDeadlineTask={setNewDeadlineTask}
-            newDeadlineTime={newDeadlineTime}
-            setNewDeadlineTime={setNewDeadlineTime}
-            handleAddDeadlineTask={handleAddDeadlineTask}
-            toggleDeadlineTask={toggleDeadlineTask}
-            deleteDeadlineTask={deleteDeadlineTask}
-            transferDeadlineTask={transferDeadlineTask}
-            calculateDeadlineStatus={calculateDeadlineStatus}
+            deadlineTasks={deadlineTasks} newDeadlineTask={newDeadlineTask} setNewDeadlineTask={setNewDeadlineTask}
+            newDeadlineTime={newDeadlineTime} setNewDeadlineTime={setNewDeadlineTime} handleAddDeadlineTask={handleAddDeadlineTask}
+            toggleDeadlineTask={toggleDeadlineTask} deleteDeadlineTask={deleteDeadlineTask} transferDeadlineTask={transferDeadlineTask} calculateDeadlineStatus={calculateDeadlineStatus}
           />
 
           <DragDropContext onDragEnd={onDragEnd}>
             <WeeklyCalendar
-              next7Days={next7Days}
-              currentDate={currentDate}
-              setCurrentDate={setCurrentDate}
-              isSameDay={isSameDay}
-              scheduledBlocks={scheduledBlocks}
-              getDayFormatted={getDayFormatted}
-              todayBlocks={todayBlocks}
-              isBurnout={isBurnout}
-              currentDailyEnergy={currentDailyEnergy}
-              MAX_DAILY_ENERGY={MAX_DAILY_ENERGY}
-              synergyState={synergyState}
-              tasks={tasks}
-              quadrants={quadrants}
-              removeBlock={removeBlock}
-              dateStrKey={dateStrKey}
-              globalGoal={globalGoal}
-              setGlobalGoal={setGlobalGoal}
-              isEditingGoal={isEditingGoal}
-              setIsEditingGoal={setIsEditingGoal}
-              academicSchedule={academicSchedule}
+              next7Days={next7Days} currentDate={currentDate} setCurrentDate={setCurrentDate} isSameDay={isSameDay}
+              scheduledBlocks={scheduledBlocks} getDayFormatted={getDayFormatted} todayBlocks={todayBlocks}
+              isBurnout={isBurnout} currentDailyEnergy={currentDailyEnergy} MAX_DAILY_ENERGY={MAX_DAILY_ENERGY}
+              synergyState={synergyState} tasks={tasks} quadrants={quadrants} removeBlock={removeBlock}
+              dateStrKey={dateStrKey} globalGoal={globalGoal} setGlobalGoal={setGlobalGoal} isEditingGoal={isEditingGoal}
+              setIsEditingGoal={setIsEditingGoal} academicSchedule={academicSchedule}
             />
 
             <EisenhowerMatrix
-              clearCompletedTasks={clearCompletedTasks}
-              quadrants={quadrants}
-              tasks={tasks}
-              openScheduleModal={openScheduleModal}
-              toggleTaskStatus={toggleTaskStatus}
-              deleteTask={deleteTask}
+              clearCompletedTasks={clearCompletedTasks} quadrants={quadrants} tasks={tasks}
+              openScheduleModal={openScheduleModal} toggleTaskStatus={toggleTaskStatus} deleteTask={deleteTask}
             />
           </DragDropContext>
         </div>
       </div>
 
-      {/* MODALS RENDERED HERE (Tidak Berubah) */}
-      {/* ... [Sisa kode modal add task, modal jadwal, notif toast, dan notif alert tidak berubah dari aslinya] ... */}
+      {showAcademicModal && createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-fade-in p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
+              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-500" /> Jadwal Kuliah Tetap
+              </h3>
+              <button onClick={() => setShowAcademicModal(false)} className="text-slate-400 hover:text-rose-500 cursor-pointer"><X className="w-6 h-6" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+              <form onSubmit={handleAddClass} className="bg-indigo-50/50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 p-5 rounded-2xl mb-6">
+                <h4 className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4">Tambah Mata Kuliah Baru</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <input type="text" placeholder="Nama Mata Kuliah" required value={newClass.course} onChange={(e) => setNewClass({ ...newClass, course: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hari</label>
+                    <select value={newClass.dayOfWeek} onChange={(e) => setNewClass({ ...newClass, dayOfWeek: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white">
+                      <option value={1}>Senin</option><option value={2}>Selasa</option><option value={3}>Rabu</option><option value={4}>Kamis</option>
+                      <option value={5}>Jumat</option><option value={6}>Sabtu</option><option value={0}>Minggu</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Mulai</label>
+                      <input type="time" required value={newClass.startTime} onChange={(e) => setNewClass({ ...newClass, startTime: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white [color-scheme:light] dark:[color-scheme:dark]" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Selesai</label>
+                      <input type="time" required value={newClass.endTime} onChange={(e) => setNewClass({ ...newClass, endTime: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white [color-scheme:light] dark:[color-scheme:dark]" />
+                    </div>
+                  </div>
+                  {/* DITAMBAHKAN: INPUT SKS & LOKASI */}
+                  <div className="grid grid-cols-2 gap-4 sm:col-span-2 mt-1">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Jumlah SKS</label>
+                      <input type="number" min="1" max="8" required value={newClass.sks} onChange={(e) => setNewClass({ ...newClass, sks: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Ruang / Tempat</label>
+                      <input type="text" placeholder="Misal: R. Audit 1" required value={newClass.location} onChange={(e) => setNewClass({ ...newClass, location: e.target.value })} className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-600 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold text-slate-800 dark:text-white" />
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" className="mt-5 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer">Simpan Jadwal</button>
+              </form>
+
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-3">Daftar Kelas (Terjadwal)</h4>
+                {academicSchedule.length === 0 ? (
+                  <p className="text-center text-sm font-medium text-slate-400 py-8 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">Belum ada jadwal kuliah yang disimpan.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"].map((dayName, idx) => {
+                      const classesToday = academicSchedule.filter(c => c.dayOfWeek === idx).sort((a, b) => a.startTime.localeCompare(b.startTime));
+                      if (classesToday.length === 0) return null;
+                      return (
+                        <div key={dayName} className="mb-4">
+                          <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1">{dayName}</h5>
+                          <div className="space-y-2">
+                            {classesToday.map(c => (
+                              <div key={c.id} className="flex justify-between items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm">
+                                <div>
+                                  <p className="font-bold text-slate-800 dark:text-white text-sm">
+                                    {c.course} 
+                                    {c.sks && <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-1.5 py-0.5 rounded ml-1.5 font-bold">{c.sks} SKS</span>}
+                                  </p>
+                                  <p className="text-xs text-indigo-500 font-medium flex items-center gap-1 mt-1">
+                                    <Clock className="w-3 h-3" /> {c.startTime} - {c.endTime} 
+                                    {c.location && (
+                                      <>
+                                        <span className="mx-1 text-slate-300 dark:text-slate-600">•</span> 
+                                        <MapPin className="w-3 h-3"/> {c.location}
+                                      </>
+                                    )}
+                                  </p>
+                                </div>
+                                <button onClick={() => removeClass(c.id)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      , document.body)}
+
+      {/* MODAL TAMBAH AGENDA (DIUBAH MENJADI BISA DI-SCROLL & RAPI) */}
       {showAddModal && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in px-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md p-6 md:p-8 animate-fade-in-up border dark:border-slate-700">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Buat Agenda Baru</h3>
-            <form onSubmit={handleAddTask}>
-              <div className="space-y-5">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-fade-in p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Header Modal - Menempel di atas (Fix) */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
+              <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-indigo-500" /> Buat Agenda Baru
+              </h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-500 cursor-pointer transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Form Container (Flex) */}
+            <form onSubmit={handleAddTask} className="flex flex-col flex-1 overflow-hidden">
+              
+              {/* Bagian Tengah yang Bisa Di-Scroll (overflow-y-auto) */}
+              <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Nama Agenda / Tugas</label>
                   <input type="text" required value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Contoh: Meeting dengan Klien" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-medium" autoFocus />
                 </div>
+                
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2"><Target className="w-4 h-4 text-indigo-500" /> Kuras Energi</label>
                   <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mb-3">Berapa koin mental yang dibutuhkan untuk agenda ini?</p>
@@ -483,47 +478,31 @@ const TimeManager = () => {
                     ))}
                   </div>
                 </div>
+                
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 mt-4">
-                    Peran Utama Agenda
-                  </label>
-                  <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mb-3">
-                    Tandai agenda ini milik peran yang mana (kuliah, organisasi, kerja, atau pribadi).
-                  </p>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Peran Utama Agenda</label>
+                  <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mb-3">Tandai agenda ini milik peran yang mana.</p>
                   <div className="grid grid-cols-2 gap-2">
                     {CATEGORY_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setNewTaskCategory(opt.id)}
-                        className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                          newTaskCategory === opt.id
-                            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 ring-2 ring-indigo-200"
-                            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-                        }`}
-                      >
-                        <span className={`text-xs font-bold ${
-                          newTaskCategory === opt.id ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200"
-                        }`}>
-                          {opt.label}
-                        </span>
-                        <span className={`text-[9px] font-bold uppercase tracking-wider mt-0.5 ${
-                          newTaskCategory === opt.id ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"
-                        }`}>
-                          {opt.short}
-                        </span>
+                      <button key={opt.id} type="button" onClick={() => setNewTaskCategory(opt.id)} className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all cursor-pointer ${newTaskCategory === opt.id ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 ring-2 ring-indigo-200" : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400"}`}>
+                        <span className={`text-xs font-bold ${newTaskCategory === opt.id ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200"}`}>{opt.label}</span>
+                        <span className={`text-[9px] font-bold uppercase tracking-wider mt-0.5 ${newTaskCategory === opt.id ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`}>{opt.short}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">Batal</button>
+              
+              {/* Footer Modal / Tombol Action - Menempel di bawah (Fix) */}
+              <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">Batal</button>
                 <button type="submit" className="px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-all flex items-center gap-2 cursor-pointer">Simpan <MoveRight className="w-4 h-4" /></button>
               </div>
+
             </form>
           </div>
-        </div>, document.body)}
+        </div>
+      , document.body)}
 
       {showScheduleModal && taskToSchedule && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in px-4">
@@ -536,11 +515,11 @@ const TimeManager = () => {
               <div className="space-y-5 mb-8">
                 <div>
                   <label className="block text-[11px] font-black tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">PILIH TANGGAL</label>
-                  <div className="relative"><input type="date" required value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-900 dark:text-indigo-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold transition-all shadow-sm" /></div>
+                  <div className="relative"><input type="date" required value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-900 dark:text-indigo-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold transition-all shadow-sm [color-scheme:light] dark:[color-scheme:dark]" /></div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-black tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">PUKUL BERAPA?</label>
-                  <div className="relative"><input type="time" required value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-900 dark:text-indigo-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold transition-all shadow-sm" /></div>
+                  <div className="relative"><input type="time" required value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-900 dark:text-indigo-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500 text-lg font-bold transition-all shadow-sm [color-scheme:light] dark:[color-scheme:dark]" /></div>
                 </div>
               </div>
               <div className="flex justify-between items-center mt-4">

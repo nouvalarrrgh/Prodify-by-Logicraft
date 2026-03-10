@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Radar, Bar } from 'react-chartjs-2';
@@ -10,6 +10,10 @@ import {
 } from 'lucide-react';
 import { generateExecutiveReport } from '../utils/ReportGenerator';
 import { NekoMascotMini, NekoMascotFull } from './NekoMascot';
+
+// IMPORT STORAGE DAN CUSTOM HOOK LEVEL DEWA
+import { getJson } from '../utils/storage';
+import { useSynergyState } from '../hooks/useSynergyState';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
@@ -98,10 +102,12 @@ const CATEGORY_META = {
 };
 
 const Dashboard = () => {
+  // MENGGUNAKAN CUSTOM HOOKS BARU
+  const { energyCoins } = useSynergyState();
+
   const [loginStreak, setLoginStreak] = useState(0);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [completedTaskCount, setCompletedTaskCount] = useState(0);
-  const [energyCoins, setEnergyCoins] = useState(10);
   const [activeDeadlineCount, setActiveDeadlineCount] = useState(0);
   const [habitsData, setHabitsData] = useState({ total: 0, doneToday: 0, weekCompletion: [] });
   const [focusSessionsToday, setFocusSessionsToday] = useState(0);
@@ -109,14 +115,12 @@ const Dashboard = () => {
   const [dynamicInsight, setDynamicInsight] = useState(null);
   const [weeklyBarData, setWeeklyBarData] = useState([]);
   const [categorySummary, setCategorySummary] = useState({});
+  const [projectProgress, setProjectProgress] = useState({ total: 0, completed: 0, percentage: 0 });
 
   // Evaluation
   const [evaluationState, setEvaluationState] = useState('idle');
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [scores, setScores] = useState(() => {
-    const saved = localStorage.getItem('stuprod_radar_scores');
-    return saved ? JSON.parse(saved) : { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 };
-  });
+  const [scores, setScores] = useState(() => getJson('stuprod_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 }));
   const [insightText, setInsightText] = useState('');
   const [finalInsight, setFinalInsight] = useState('');
 
@@ -124,7 +128,8 @@ const Dashboard = () => {
   const [heatmap, setHeatmap] = useState(() => Array.from({ length: 48 }, (_, i) => ({
     id: i, date: formatDateStr(new Date(new Date().setDate(new Date().getDate() - (47 - i)))), active: false, intensity: 0, count: 0
   })));
-  const userName = JSON.parse(localStorage.getItem('stuprod_user') || '{}')?.name || 'Mahasiswa';
+  
+  const userName = getJson('stuprod_user', { name: 'Mahasiswa' }).name;
   const greetingMeta = useMemo(() => {
     const h = new Date().getHours();
     if (h < 6) return { greeting: 'Selamat Dini Hari', icon: '🌙' };
@@ -138,13 +143,13 @@ const Dashboard = () => {
     const todayLocal = formatDateStr(new Date());
     const todayUTC = new Date().toISOString().split('T')[0];
 
-    const streakData = JSON.parse(localStorage.getItem('stuprod_login_streak') || '{"lastLogin":"","streak":0}');
+    const streakData = getJson('stuprod_login_streak', { lastLogin: '', streak: 0 });
     setLoginStreak(streakData.streak);
     if (streakData.lastLogin !== todayLocal) setShowCheckInModal(true);
 
-    const deadlineTasks = JSON.parse(localStorage.getItem('stuprod_tasks') || '[]');
-    const matrixTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
-    const timeBlocks = JSON.parse(localStorage.getItem('time_blocks') || '{}');
+    const deadlineTasks = getJson('stuprod_tasks', []);
+    const matrixTasks = getJson('matrix_tasks', []);
+    const timeBlocks = getJson('time_blocks', {});
 
     const completedCount = deadlineTasks.filter(t => t.completed).length + matrixTasks.filter(t => t.completed).length;
     setCompletedTaskCount(completedCount);
@@ -152,11 +157,17 @@ const Dashboard = () => {
     const activeDeadlines = deadlineTasks.filter(t => !t.completed && new Date(t.deadline) > new Date()).length;
     setActiveDeadlineCount(activeDeadlines);
 
-    // MENGAMBIL STATE SINERGI UNTUK KOIN ENERGI
-    const synergyStatus = localStorage.getItem('stuprod_balance_state') || 'balanced';
-    setEnergyCoins(synergyStatus === 'buffed' ? 13 : synergyStatus === 'debuffed' ? 7 : 10);
+    // KALKULASI PROGRESS PROJECT/SKRIPSI
+    const allTasks = [...deadlineTasks, ...matrixTasks];
+    const pTasks = allTasks.filter(t => t.category === 'project');
+    const completedPTasks = pTasks.filter(t => t.completed).length;
+    setProjectProgress({
+      total: pTasks.length,
+      completed: completedPTasks,
+      percentage: pTasks.length > 0 ? Math.round((completedPTasks / pTasks.length) * 100) : 0
+    });
 
-    const allHabits = JSON.parse(localStorage.getItem('stuprod_habits_v4') || '[]');
+    const allHabits = getJson('stuprod_habits_v4', []);
     const doneTodayHabits = allHabits.filter(h => (h.history?.[todayLocal] || 0) >= h.targetCount).length;
     setHabitsData({ total: allHabits.length, doneToday: doneTodayHabits });
 
@@ -175,7 +186,7 @@ const Dashboard = () => {
     });
     setWeeklyBarData(weekBar);
 
-    // RINGKASAN PERAN (KATEGORI) BERDASARKAN BLOK WAKTU 7 HARI TERAKHIR
+    // RINGKASAN PERAN
     const categoryCounts = {};
     Object.keys(timeBlocks || {}).forEach(date => {
       const dateObj = new Date(date);
@@ -209,7 +220,7 @@ const Dashboard = () => {
       return { id: i, date: ds, count, active: count > 0, intensity: count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : 3 };
     }));
 
-    const savedScores = JSON.parse(localStorage.getItem('stuprod_radar_scores') || '{"akademik":50,"organisasi":50,"istirahat":50,"sosial":50,"tugas":50}');
+    const savedScores = getJson('stuprod_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 });
     setScores(savedScores);
 
     const is = computeImpactScore(
@@ -268,7 +279,7 @@ const Dashboard = () => {
 
   const handleCheckIn = () => {
     const todayLocal = formatDateStr(new Date());
-    const streakData = JSON.parse(localStorage.getItem('stuprod_login_streak') || '{"lastLogin":"","streak":0}');
+    const streakData = getJson('stuprod_login_streak', { lastLogin: '', streak: 0 });
     let newStreak = streakData.streak;
     if (streakData.lastLogin) {
       const diff = Math.ceil(Math.abs(new Date(todayLocal) - new Date(streakData.lastLogin)) / (1000 * 60 * 60 * 24));
@@ -409,8 +420,8 @@ const Dashboard = () => {
               </div>
             )}
 
-            {/* Hari ini ringkasan */}
-            <div className="grid grid-cols-2 gap-3 mt-1">
+            {/* Hari ini ringkasan & Skripsi */}
+            <div className="grid grid-cols-2 gap-3 mt-2">
               <div className="bg-indigo-50/80 dark:bg-indigo-500/10 border border-indigo-100/50 dark:border-indigo-500/20 rounded-xl p-3 text-center transition-transform hover:scale-[1.02] shadow-sm">
                 <Moon className="w-4 h-4 text-indigo-500 mx-auto mb-1.5" />
                 <div className="text-xl font-black text-indigo-700 dark:text-indigo-400 leading-none">{focusSessionsToday}</div>
@@ -420,6 +431,29 @@ const Dashboard = () => {
                 <Sun className="w-4 h-4 text-orange-500 mx-auto mb-1.5" />
                 <div className="text-xl font-black text-orange-700 dark:text-orange-400 leading-none">{habitsData.doneToday}<span className="text-sm text-orange-400">/{habitsData.total}</span></div>
                 <div className="text-[9px] font-bold text-orange-400 dark:text-orange-500 uppercase tracking-widest mt-1">Habit Selesai</div>
+              </div>
+            </div>
+
+            {/* TRACKER SKRIPSI / PROJECT */}
+            <div className="mt-3 bg-rose-50/80 dark:bg-rose-500/10 border border-rose-100/50 dark:border-rose-500/20 rounded-xl p-4 shadow-sm transition-transform hover:scale-[1.01]">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                  <Target className="w-4 h-4" /> Progress Skripsi / Project
+                </span>
+                <span className="text-[11px] font-bold text-white bg-rose-500 px-2 py-0.5 rounded-md">{projectProgress.percentage}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-rose-200/50 dark:bg-rose-900/50 rounded-full overflow-hidden mb-3 shadow-inner">
+                <div className="h-full bg-gradient-to-r from-rose-400 to-rose-600 transition-all duration-1000" style={{ width: `${projectProgress.percentage}%` }}></div>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                <p className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                  {projectProgress.completed} dari {projectProgress.total} Tugas Selesai
+                </p>
+                <button 
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'zennotes' }))}
+                  className="text-[10px] bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/20 px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md">
+                  Lanjutkan Menulis ✍️
+                </button>
               </div>
             </div>
           </div>
@@ -478,7 +512,7 @@ const Dashboard = () => {
               
               {evaluationState === 'idle' && (
                 <div className="flex flex-col items-center text-center animate-fade-in-up w-full">
-                  <NekoMascotFull className="relative z-10 drop-shadow-md -mt-6 md:-mt-10" animate={true} />
+                  <NekoMascotMini className="w-32 h-32 object-contain relative z-10 animate-bounce drop-shadow-sm" />
                   
                   <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm w-full relative z-0 mt-2">
                     <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-white dark:border-b-slate-800" />
@@ -495,7 +529,7 @@ const Dashboard = () => {
               {evaluationState === 'evaluating' && (
                 <div className="flex flex-col items-center w-full animate-fade-in-up h-full justify-between pb-2">
                   <div className="flex flex-col items-center w-full">
-                    <NekoMascotMini className="w-16 h-16 object-contain relative z-10 animate-bounce drop-shadow-sm" />
+                    <NekoMascotMini className="w-20 h-20 object-contain relative z-10 animate-bounce drop-shadow-sm" />
                     
                     <div className="bg-white/90 dark:bg-slate-800/90 shadow-sm rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 w-full text-center relative mb-5 z-0 mt-2">
                       <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-white dark:border-b-slate-800" />

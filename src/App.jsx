@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import Login from './components/Login';
 import LandingPage from './components/LandingPage';
 import CognitiveGuard from './components/CognitiveGuard';
+import NekoGuide from './components/NekoGuide';
 
 // LAZY LOADING KOMPONEN DASHBOARD DLL
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -84,6 +85,15 @@ function App() {
       window.removeEventListener('themeChanged', loadGlobalData);
     }
   }, [loadGlobalData]);
+
+  useEffect(() => {
+    const handleGlobalNav = (e) => {
+      setActiveMenu(e.detail);
+      setIsSidebarOpen(false); // Tutup sidebar otomatis di versi mobile
+    };
+    window.addEventListener('navigate', handleGlobalNav);
+    return () => window.removeEventListener('navigate', handleGlobalNav);
+  }, []);
 
   useEffect(() => {
     const onboarded = localStorage.getItem('stuprod_onboarded_v1');
@@ -487,7 +497,8 @@ function App() {
             </div>
           </div>
           , document.body)}
-
+          
+          {user && <NekoGuide />}
       </main>
     </div>
   );

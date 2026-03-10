@@ -25,6 +25,19 @@ export default function Settings({ onLogout }) {
     const [activeFaq, setActiveFaq] = useState(null);
     const fileInputRef = useRef(null);
 
+    // Menghitung estimasi penggunaan LocalStorage secara Real-Time
+    const calculateStorage = () => {
+        let total = 0;
+        for (let x in localStorage) {
+            if (!localStorage.hasOwnProperty(x)) continue;
+            total += ((localStorage[x].length + x.length) * 2);
+        }
+        return (total / 1024 / 1024).toFixed(2); // Konversi byte ke MB
+    };
+    
+    const usedStorageMB = calculateStorage();
+    const storagePercent = Math.min((usedStorageMB / 5.0) * 100, 100);
+
     // FAQ Data
     const faqs = [
         { q: "Apakah data saya aman tanpa akun server?", a: "Sangat aman! StuProd dirancang dengan arsitektur 'Local-First'. Seluruh data catatan, tugas, dan kebiasaan Anda dienkripsi dan disimpan secara eksklusif di dalam penyimpanan lokal browser perangkat Anda. Kami tidak memiliki server yang menyadap data Anda." },
@@ -252,16 +265,20 @@ export default function Settings({ onLogout }) {
                             </button>
                         </div>
 
+                        {/* BAGIAN PROGRESS BAR KAPASITAS YANG DIUPDATE */}
                         <div className="pb-6 border-b border-slate-100 dark:border-slate-800">
                             <div className="flex justify-between items-end mb-2">
                                 <p className="text-sm font-bold text-slate-800 dark:text-white">Kapasitas Penyimpanan Lokal</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">1.4 MB / 5.0 MB</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{usedStorageMB} MB / 5.0 MB</p>
                             </div>
-                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 shadow-inner">
-                                <div className="bg-indigo-600 h-2.5 rounded-full relative" style={{ width: '28%' }}>
+                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 shadow-inner relative overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-1000 ${storagePercent > 80 ? 'bg-rose-500' : storagePercent > 50 ? 'bg-amber-500' : 'bg-indigo-600'}`} style={{ width: `${storagePercent}%` }}>
                                     <div className="absolute right-0 top-0 bottom-0 w-6 bg-white/20 animate-pulse rounded-r-full"></div>
                                 </div>
                             </div>
+                            <p className="text-[10px] text-slate-500 mt-2">
+                                *Jika sering pakai whiteboard (ZenNotes), disarankan rutin ekspor PDF & backup JSON.
+                            </p>
                         </div>
 
                         <div className="pt-6 flex justify-between items-center">

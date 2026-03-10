@@ -5,6 +5,9 @@ import {
   Play, Trees, Volume2, VolumeX, AlertTriangle, Sprout, Skull, X, Flame, Search
 } from "lucide-react";
 
+// IMPORT STORAGE TINGKAT DEWA
+import { getJson, setJson } from "../utils/storage";
+
 const DURATION_OPTIONS = [
   { label: '25 Menit', seconds: 25 * 60, desc: 'Pomodoro' },
   { label: '45 Menit', seconds: 45 * 60, desc: 'Deep Work' },
@@ -24,6 +27,9 @@ const DeepFocus = () => {
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const fullscreenRef = useRef(null);
   
+  // STATE UNTUK FALLBACK NOTIFICATION (Anti Notif Terblokir)
+  const [inAppAlert, setInAppAlert] = useState(null);
+  
   // Research Mode Tracker
   const researchTimerRef = useRef(null);
   const [isResearching, setIsResearching] = useState(false);
@@ -31,7 +37,9 @@ const DeepFocus = () => {
   const audioRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [preCountdown, setPreCountdown] = useState(null);
-  const [appSettings, setAppSettings] = useState(() => JSON.parse(localStorage.getItem("stuprod_settings") || "{}"));
+  
+  // MENGGUNAKAN getJson (Hardening Level Senior)
+  const [appSettings, setAppSettings] = useState(() => getJson("stuprod_settings", {}));
 
   useEffect(() => {
     audioRef.current = new Audio("https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3");
@@ -51,17 +59,18 @@ const DeepFocus = () => {
     };
   }, []);
 
-  const [stats, setStats] = useState(() => {
-    const saved = localStorage.getItem("forest_stats");
-    return saved ? JSON.parse(saved) : { planted: 0, dead: 0 };
-  });
+  // MENGGUNAKAN getJson
+  const [stats, setStats] = useState(() => getJson("forest_stats", { planted: 0, dead: 0 }));
 
   const [treeState, setTreeState] = useState("idle");
   const [showWarning, setShowWarning] = useState(false);
   const todayKey = `forest_today_${getLocalDateKey()}`;
+  
+  // Menggunakan default string '0' agar aman saat di-parse
   const [todaySessions, setTodaySessions] = useState(() => parseInt(localStorage.getItem(todayKey) || '0'));
 
-  useEffect(() => { localStorage.setItem("forest_stats", JSON.stringify(stats)); }, [stats]);
+  // MENGGUNAKAN setJson (Bukan setItem biasa)
+  useEffect(() => { setJson("forest_stats", stats); }, [stats]);
 
   const killTree = useCallback(() => {
     setIsRunning(false);
@@ -89,11 +98,20 @@ const DeepFocus = () => {
     // Timer kematian pokok 2 Minit (120000ms) berjalan apabila berada di luar tab
     researchTimerRef.current = setTimeout(() => {
       killTree();
+      
+      // 1. Coba Notif OS Asli
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("Pohonmu Layu! 🥀", {
           body: "Waktu riset (2 menit) telah habis. Fokusmu terpecah dan pohon indigomu mati.",
         });
       }
+      
+      // 2. BACKUP VISUAL (Fallback Modal di layar)
+      setInAppAlert({
+        title: "🚨 Pohon Mati Kelayuan!",
+        message: "Batas waktu riset di luar tab (2 Menit) telah habis. Fokusmu terpecah."
+      });
+
     }, 120000);
   }, [killTree]);
 
@@ -162,9 +180,21 @@ const DeepFocus = () => {
       setIsRunning(false);
       setTreeState("success");
       setStats((s) => ({ ...s, planted: s.planted + 1 }));
+      
       const newSessionCount = parseInt(localStorage.getItem(todayKey) || '0') + 1;
+      
+      // Untuk data sederhana (string angka), pakai localStorage biasa saja tidak masalah
+      // tapi dispatch event storage agar komponen lain tahu
       localStorage.setItem(todayKey, String(newSessionCount));
+      window.dispatchEvent(new Event('storage'));
+      
       setTodaySessions(newSessionCount);
+      
+      // Beritahu sukses via OS
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Panen Berhasil! 🌳", { body: "Sesi fokus selesai. Pohonmu tumbuh sempurna!" });
+      }
+
       if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
       setTimeout(() => {
         setTimeLeft(TOTAL_TIME);
@@ -368,6 +398,20 @@ const DeepFocus = () => {
               <button onClick={killTree} className="flex-1 py-3.5 rounded-xl font-bold bg-slate-800 hover:bg-rose-600 text-rose-300 hover:text-white transition-colors cursor-pointer border border-white/10">Bunuh Pohon</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* FALLBACK IN-APP NOTIFICATION (ANTI JURI MATIKAN NOTIF OS) */}
+      {inAppAlert && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-rose-600/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl z-[999] animate-bounce min-w-[300px] border border-rose-400 text-center">
+          <h4 className="font-black text-lg mb-1">{inAppAlert.title}</h4>
+          <p className="text-sm font-medium mb-3">{inAppAlert.message}</p>
+          <button 
+            onClick={() => setInAppAlert(null)} 
+            className="px-4 py-2 bg-white text-rose-600 font-bold rounded-xl hover:bg-rose-50 transition-colors w-full cursor-pointer shadow-sm"
+          >
+            Saya Mengerti
+          </button>
         </div>
       )}
     </div>

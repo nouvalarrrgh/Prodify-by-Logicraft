@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Layout, FilePlus, FileText, Trash2, Bold, Italic, List, ListOrdered, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type, RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight, PaintBucket, Link, Undo, Redo } from 'lucide-react';
+import { 
+  Plus, Layout, FilePlus, FileText, Trash2, Bold, Italic, List, ListOrdered, 
+  Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, 
+  Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type, 
+  RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight, 
+  PaintBucket, Link, Undo, Redo, Target, ChevronRight 
+} from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { NekoMascotMini } from './NekoMascot';
 
@@ -25,9 +31,7 @@ const ZenNotes = () => {
   const [showTaskPopup, setShowTaskPopup] = useState(false);
   const [popupPos, setPopupPos] = useState({ x: 0, y: 0 });
 
-  // Mode Notes: 'text' or 'draw' (Whiteboard)
   const [noteMode, setNoteMode] = useState('text');
-
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageOrientation, setPageOrientation] = useState('potrait');
   const [lineSpacing, setLineSpacing] = useState('leading-relaxed');
@@ -39,11 +43,13 @@ const ZenNotes = () => {
     return settings.autoSaveNotes !== false;
   });
 
+  // === FITUR BARU: STATE UNTUK PANEL TARGET PROJECT ===
+  const [showProjectPanel, setShowProjectPanel] = useState(false);
+  const [projectTasks, setProjectTasks] = useState([]);
+
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const containerRef = useRef(null);
-
-  // --- WHITEBOARD REFERENCES & STATES ---
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -57,7 +63,29 @@ const ZenNotes = () => {
     return text ? text.split(' ').length : 0;
   }, [activePage?.content]);
 
-  // Focus and populate text editor
+  // === FITUR BARU: MENGAMBIL DATA TUGAS DARI BALANCE MATRIX ===
+  useEffect(() => {
+    const loadProjectTasks = () => {
+      const allTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
+      setProjectTasks(allTasks.filter(t => t.category === 'project'));
+    };
+    loadProjectTasks();
+    // Sinkronisasi otomatis jika data di tempat lain berubah
+    window.addEventListener('storage', loadProjectTasks);
+    return () => window.removeEventListener('storage', loadProjectTasks);
+  }, []);
+
+  // === FITUR BARU: MENCENTANG TUGAS DARI DALAM NOTES ===
+  const toggleProjectTask = (id) => {
+    const allTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
+    const updated = allTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+    localStorage.setItem('matrix_tasks', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage')); // Memicu pembaruan UI
+    
+    // Update local state agar instan
+    setProjectTasks(updated.filter(t => t.category === 'project'));
+  };
+
   useEffect(() => {
     if (noteMode === 'text' && editorRef.current) {
       if (activePage && editorRef.current.innerHTML !== activePage.content) {
@@ -66,23 +94,18 @@ const ZenNotes = () => {
     }
   }, [activePageId, activePage, noteMode]);
 
-  // Handle Fullscreen
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFsChange);
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // ==========================================
-  // SAFE STORAGE ENGINE (PENANGANAN ERROR MEMORI)
-  // ==========================================
   const safeSaveToLocalStorage = (key, data) => {
     try {
       localStorage.setItem(key, JSON.stringify(data));
       setSaveStatus('Tersimpan Otomatis');
       return true;
     } catch (e) {
-      // Deteksi error jika memori LocalStorage penuh
       if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
         setSaveStatus('Gagal: Memori Penuh!');
         alert("🚨 MEMORI LOKAL BROWSER PENUH! 🚨\n\nKarena StuProd mengutamakan privasi (Local-First), penyimpanan browser Anda telah mencapai batas.\n\nSolusi:\n1. Ekspor catatan lama Anda ke PDF.\n2. Hapus halaman catatan lama untuk mengosongkan memori.");
@@ -93,13 +116,9 @@ const ZenNotes = () => {
     }
   };
 
-  // Autosave
   useEffect(() => {
     if (!autoSaveEnabled) return undefined;
-    
-    // Ubah status saat mulai menyimpan
     setSaveStatus('Menyimpan...');
-    
     const timeout = setTimeout(() => {
       safeSaveToLocalStorage('zen_pages_multi', pages);
     }, 800);
@@ -119,11 +138,7 @@ const ZenNotes = () => {
     setPages(prevPages => prevPages.map(p => p.id === activePageId ? { ...p, [field]: value } : p));
   };
 
-  // ==========================================
-  // LOGIKA WHITEBOARD (CANVAS 2D)
-  // ==========================================
-
-  // Setup Canvas
+  // --- LOGIKA WHITEBOARD (CANVAS 2D) ---
   useEffect(() => {
     if (noteMode === 'draw' && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -185,7 +200,6 @@ const ZenNotes = () => {
     if (e.cancelable) e.preventDefault();
     const coords = getCoordinates(e);
     if (!coords) return;
-
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(coords.x, coords.y);
     setIsDrawing(true);
@@ -196,7 +210,6 @@ const ZenNotes = () => {
     if (e.cancelable) e.preventDefault();
     const coords = getCoordinates(e);
     if (!coords) return;
-
     ctxRef.current.lineTo(coords.x, coords.y);
     ctxRef.current.stroke();
   };
@@ -205,9 +218,7 @@ const ZenNotes = () => {
     if (!isDrawing) return;
     ctxRef.current.closePath();
     setIsDrawing(false);
-
     if (canvasRef.current) {
-      // KOMPRESI GAMBAR: Gunakan format WebP dengan kualitas 50% untuk menghemat memori
       const dataUrl = canvasRef.current.toDataURL('image/webp', 0.5);
       updateActivePage('drawingData', dataUrl);
     }
@@ -232,9 +243,7 @@ const ZenNotes = () => {
     }
   };
 
-  // ==========================================
-  // LOGIKA TEKS EDITOR STANDARD
-  // ==========================================
+  // --- LOGIKA TEKS EDITOR STANDARD ---
   const handleEditorInput = () => {
     if (editorRef.current) {
       updateActivePage('content', editorRef.current.innerHTML);
@@ -263,14 +272,12 @@ const ZenNotes = () => {
 
   const handleExportPDF = () => {
     if (!activePage) return;
-
     let element;
     if (noteMode === 'text') {
       element = editorRef.current;
     } else {
       element = canvasRef.current;
     }
-
     if (!element) return;
 
     const isDark = document.documentElement.classList.contains('dark');
@@ -300,7 +307,9 @@ const ZenNotes = () => {
   };
 
   const handleOpenModal = () => { setNewPageTitle(''); setIsModalOpen(true); };
-  const confirmCreateNewPage = (e) => {
+  
+  // === FITUR BARU: FUNGSI BUAT CATATAN BIASA ===
+  const createBlankPage = (e) => {
     e.preventDefault();
     const title = newPageTitle.trim() || 'Catatan Baru';
     const newPage = { id: Date.now(), title: title, content: '', drawingData: null };
@@ -308,6 +317,42 @@ const ZenNotes = () => {
     setActivePageId(newPage.id);
     setIsModalOpen(false);
     setSearchQuery('');
+  };
+
+  // === FITUR BARU: FUNGSI GENERATE TEMPLATE SKRIPSI ===
+  const createTemplateSkripsi = (e) => {
+    e.preventDefault();
+    const title = newPageTitle.trim() || 'Draf Skripsi / Project';
+    
+    // Ini HTML Template Cerdas yang akan langsung muncul di halaman
+    const templateContent = `
+      <h1 style="text-align: center;"><strong>[JUDUL SKRIPSI / PROJECT BESAR]</strong></h1>
+      <p style="text-align: center; color: #64748b;"><em>Ditulis oleh: Mahasiswa Produktif</em></p>
+      <hr>
+      <br>
+      <h2><strong>BAB 1: PENDAHULUAN</strong></h2>
+      <h3>1.1 Latar Belakang Masalah</h3>
+      <p>Tuliskan permasalahan utama yang ingin diselesaikan di sini...</p>
+      <br>
+      <h3>1.2 Rumusan Masalah</h3>
+      <ol>
+        <li>Apa masalah pertama yang akan dipecahkan?</li>
+        <li>Bagaimana metode penyelesaiannya?</li>
+      </ol>
+      <br>
+      <h2><strong>BAB 2: TINJAUAN PUSTAKA</strong></h2>
+      <h3>2.1 Kajian Terdahulu</h3>
+      <p>Masukkan referensi jurnal dan buku landasan teori di sini...</p>
+    `;
+
+    const newPage = { id: Date.now(), title: title, content: templateContent, drawingData: null };
+    setPages([...pages, newPage]);
+    setActivePageId(newPage.id);
+    setIsModalOpen(false);
+    setSearchQuery('');
+    
+    // Otomatis buka panel kanan saat membuat Skripsi
+    setShowProjectPanel(true);
   };
 
   const deletePage = (e, id) => {
@@ -375,24 +420,28 @@ const ZenNotes = () => {
     const cleanText = selectedText.trim();
     if (!cleanText) return;
     const existingTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
-    const newTask = { id: Date.now().toString(), title: cleanText, tag: 'Dari Catatan', quadrant: 'unassigned', energy: 1, completed: false };
+    // Jika panel project sedang terbuka, otomatis jadikan ini sebagai Task Project
+    const taskCategory = showProjectPanel ? 'project' : 'academic'; 
+    const newTask = { id: Date.now().toString(), title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false };
+    
     localStorage.setItem('matrix_tasks', JSON.stringify([...existingTasks, newTask]));
     window.dispatchEvent(new Event('storage'));
+    
     setSaveStatus('Tugas Ditambahkan!');
     setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
     setShowTaskPopup(false);
     setSelectedText('');
     window.getSelection().removeAllRanges();
   };
-  const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
 
+  const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
   const editorClasses = `w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} ${pageOrientation === 'potrait' ? 'max-w-[816px]' : 'max-w-[1056px]'}`;
 
   return (
     <>
       <div ref={containerRef} className={`flex flex-col md:flex-row h-full liquid-glass dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-700/50 overflow-hidden spatial-shadow transition-all ${isFullscreen ? 'fixed inset-0 z-[999] bg-slate-50 dark:bg-slate-950 w-full h-[100dvh] rounded-none' : 'rounded-3xl relative'}`}>
 
-        {/* SIDEBAR */}
+        {/* SIDEBAR KIRI */}
         <aside className="w-full md:w-64 shrink-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md border-b md:border-b-0 md:border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col min-h-[150px] md:h-full z-10">
           <div className="p-3 md:p-4 border-b border-slate-200 dark:border-slate-700/50">
             <div className="flex items-center justify-between mb-3">
@@ -449,7 +498,7 @@ const ZenNotes = () => {
           </div>
         </aside>
 
-        {/* WORKSPACE */}
+        {/* WORKSPACE TENGAH */}
         <main className="flex-1 flex flex-col relative min-w-0 h-[65%] md:h-full bg-white/30 dark:bg-slate-950/30 backdrop-blur-sm z-0">
           {!activePageId ? (
             <div className="flex-1 overflow-y-auto p-4 flex items-center justify-center">
@@ -461,29 +510,32 @@ const ZenNotes = () => {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col min-w-0 h-full">
+            <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
 
-              {/* HEADER */}
-              <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 px-6 py-4 flex justify-between items-center shadow-sm z-10 shrink-0 gap-4">
+              {/* HEADER TOOLBAR ATAS */}
+              <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm z-10 shrink-0 gap-4">
                 <input type="text" placeholder="Judul Catatan..." value={activePage?.title || ''} onChange={(e) => updateActivePage('title', e.target.value)} className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white border-none outline-none bg-transparent placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:text-indigo-900 dark:focus:text-indigo-300 w-full transition-colors" />
+                
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className={`text-[10px] whitespace-nowrap font-bold px-3 py-1.5 rounded-full border transition-colors ${saveStatus === 'Menyimpan...' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20' : saveStatus.includes('Gagal') ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20'}`}>
+                  <span className={`hidden md:inline-block text-[10px] whitespace-nowrap font-bold px-3 py-1.5 rounded-full border transition-colors ${saveStatus === 'Menyimpan...' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20' : saveStatus.includes('Gagal') ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20'}`}>
                     {saveStatus}
                   </span>
-
-                  {noteMode === 'text' && (
-                    <span className="hidden md:flex text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 items-center gap-1">
-                      <Type className="w-3 h-3" /> {wordCount} Kata
-                    </span>
-                  )}
 
                   <button onClick={toggleFullscreen} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                     {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                   </button>
+
+                  {/* === TOMBOL TOGGLE PROJECT PANEL (BARU) === */}
+                  <button 
+                    onClick={() => setShowProjectPanel(!showProjectPanel)} 
+                    className={`flex items-center gap-1.5 p-2 md:px-3 text-xs font-bold rounded-xl border shadow-sm cursor-pointer transition-colors ${showProjectPanel ? 'bg-rose-600 text-white border-rose-500' : 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10'}`}
+                  >
+                    <Target className="w-4 h-4" /> <span className="hidden md:inline">Target Project</span>
+                  </button>
                 </div>
               </div>
 
-              {/* TOOLBARS */}
+              {/* TOOLBARS (TEXT ATAU DRAW) */}
               <div className="flex flex-col border-b border-slate-200/50 dark:border-slate-700/50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl sticky top-0 z-20 shrink-0 shadow-sm">
 
                 {noteMode === 'text' ? (
@@ -542,22 +594,8 @@ const ZenNotes = () => {
                         <button onMouseDown={(e) => execCommand(e, 'strikeThrough')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Strikethrough className="w-4 h-4" /></button>
                       </div>
 
-                      {/* Colors */}
-                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 ml-1 border border-slate-200/60 dark:border-slate-700/60">
-                        <label className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-indigo-600 dark:text-indigo-400 relative cursor-pointer tooltip" title="Warna Teks">
-                          <Type className="w-4 h-4 pointer-events-none" />
-                          <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onChange={(e) => { if (editorRef.current) editorRef.current.focus(); execCommand(e, 'foreColor', e.target.value); }} />
-                        </label>
-                        <label className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-amber-500 relative cursor-pointer tooltip" title="Warna Highlight">
-                          <PaintBucket className="w-4 h-4 pointer-events-none" />
-                          <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onChange={(e) => { if (editorRef.current) editorRef.current.focus(); execCommand(e, 'hiliteColor', e.target.value); }} />
-                        </label>
-                      </div>
-
-                      <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
                       {/* Alignment */}
-                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 ml-1 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'justifyLeft')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><AlignLeft className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'justifyCenter')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><AlignCenter className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'justifyRight')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><AlignRight className="w-4 h-4" /></button>
@@ -574,20 +612,12 @@ const ZenNotes = () => {
                         <button onMouseDown={handleInsertLink} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-indigo-600 dark:text-indigo-400 tooltip"><Link className="w-4 h-4" /></button>
                         <button onMouseDown={handleInsertCheckbox} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-emerald-600 dark:text-emerald-400 tooltip"><CheckSquare className="w-4 h-4" /></button>
 
-                        {/* Spasi Baris */}
-                        <select value={lineSpacing} onChange={(e) => setLineSpacing(e.target.value)} className="bg-transparent text-slate-600 dark:text-slate-300 text-xs font-semibold focus:ring-0 outline-none cursor-pointer p-1 ml-1">
-                          <option value="leading-none">Spasi 1.0</option>
-                          <option value="leading-snug">Spasi 1.15</option>
-                          <option value="leading-relaxed">Spasi 1.5</option>
-                          <option value="leading-loose">Spasi 2.0</option>
-                        </select>
                       </div>
 
                     </div>
 
                     {/* TEXT TOOLBAR ROW 2 */}
                     <div className="flex flex-wrap items-center gap-3 p-2 px-4 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-400 overflow-x-auto custom-scrollbar">
-                      <div className="flex items-center gap-1.5 mr-2 text-indigo-700 dark:text-indigo-400"><Palette className="w-4 h-4" /> <span className="hidden md:inline">Sisipkan:</span></div>
                       <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-300 p-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-500/10 cursor-pointer border border-transparent hover:border-indigo-100 dark:hover:border-indigo-500/30">
                         <ImageIcon className="w-3.5 h-3.5" /> Gambar
                         <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
@@ -646,76 +676,123 @@ const ZenNotes = () => {
                 )}
               </div>
 
-              {/* EDITOR AREA */}
-              <div className="flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 flex justify-center items-start p-4 md:p-8 relative">
-
-                {noteMode === 'text' ? (
-                  <div
-                    ref={editorRef}
-                    contentEditable
-                    onInput={handleEditorInput}
-                    onKeyDown={handleKeyDown}
-                    onMouseUp={handleTextSelection}
-                    onKeyUp={handleTextSelection}
-                    onBlur={() => setTimeout(() => setShowTaskPopup(false), 120)}
-                    className={editorClasses}
-                    style={{ minHeight: `${PAGE_HEIGHT}px`, height: 'max-content', marginBottom: '40px' }}
-                    data-placeholder="Mulai menulis jurnal, gagasan, atau tugasmu di sini..."
-                  />
-                ) : (
-                  <div className="w-full max-w-[1056px] bg-white border border-slate-200 shadow-md relative" style={{ minHeight: '700px', cursor: 'crosshair', touchAction: 'none' }}>
-                    <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #4f46e5 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-
-                    <canvas
-                      ref={canvasRef}
-                      onPointerDown={startDrawing}
-                      onPointerMove={draw}
-                      onPointerUp={stopDrawing}
-                      onPointerOut={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
-                      className="absolute inset-0 w-full h-full touch-none"
+              {/* EDITOR AREA + KANAN PANEL (FLEX CONTAINER) */}
+              <div className="flex-1 flex overflow-hidden w-full relative">
+                
+                {/* AREA MENGETIK UTAMA */}
+                <div className={`flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 flex justify-center items-start p-4 md:p-8 transition-all duration-300 ${showProjectPanel ? 'md:mr-72' : ''}`}>
+                  {noteMode === 'text' ? (
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      onInput={handleEditorInput}
+                      onKeyDown={handleKeyDown}
+                      onMouseUp={handleTextSelection}
+                      onKeyUp={handleTextSelection}
+                      onBlur={() => setTimeout(() => setShowTaskPopup(false), 120)}
+                      className={editorClasses}
+                      style={{ minHeight: `${PAGE_HEIGHT}px`, height: 'max-content', marginBottom: '40px' }}
+                      data-placeholder="Mulai menulis jurnal, gagasan, atau draf project di sini..."
                     />
-                  </div>
-                )}
+                  ) : (
+                    <div className="w-full max-w-[1056px] bg-white border border-slate-200 shadow-md relative" style={{ minHeight: '700px', cursor: 'crosshair', touchAction: 'none' }}>
+                      <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #4f46e5 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                      <canvas
+                        ref={canvasRef}
+                        onPointerDown={startDrawing}
+                        onPointerMove={draw}
+                        onPointerUp={stopDrawing}
+                        onPointerOut={stopDrawing}
+                        onTouchStart={startDrawing}
+                        onTouchMove={draw}
+                        onTouchEnd={stopDrawing}
+                        className="absolute inset-0 w-full h-full touch-none"
+                      />
+                    </div>
+                  )}
 
-                {/* Floating Popup "Jadikan Tugas" */}
-                {showTaskPopup && noteMode === 'text' && (
-                  <div className="absolute z-50 animate-fade-in-up bg-slate-900 dark:bg-slate-800 border dark:border-slate-700 text-white px-3 py-2 rounded-xl shadow-xl flex items-center gap-2 cursor-pointer hover:bg-indigo-600 transition-colors" style={{ left: `${popupPos.x}px`, top: `${popupPos.y}px`, transform: 'translateX(-50%)' }} onClick={saveToMatrix} onMouseDown={(e) => e.preventDefault()}>
-                    <CheckSquare className="w-4 h-4 text-emerald-400" /><span className="text-xs font-bold">Kirim ke Balance Matrix</span>
+                  {/* Floating Popup "Jadikan Tugas" */}
+                  {showTaskPopup && noteMode === 'text' && (
+                    <div className="absolute z-50 animate-fade-in-up bg-slate-900 dark:bg-slate-800 border dark:border-slate-700 text-white px-3 py-2 rounded-xl shadow-xl flex items-center gap-2 cursor-pointer hover:bg-indigo-600 transition-colors" style={{ left: `${popupPos.x}px`, top: `${popupPos.y}px`, transform: 'translateX(-50%)' }} onClick={saveToMatrix} onMouseDown={(e) => e.preventDefault()}>
+                      <CheckSquare className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold">{showProjectPanel ? 'Jadikan Target Project' : 'Kirim ke Balance Matrix'}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* === PANEL TARGET PROJECT MELAYANG DI KANAN === */}
+                <div className={`absolute right-0 top-0 bottom-0 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-l border-slate-200/60 dark:border-slate-700/60 shadow-2xl transition-transform duration-300 z-40 flex flex-col ${showProjectPanel ? 'translate-x-0' : 'translate-x-full'}`}>
+                  <div className="p-4 border-b border-slate-200/60 dark:border-slate-700/60 flex justify-between items-center bg-rose-50/50 dark:bg-rose-900/10">
+                    <h4 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2 text-sm">
+                      <Target className="w-5 h-5" /> Target Project
+                    </h4>
+                    <button onClick={() => setShowProjectPanel(false)} className="p-1 rounded-md hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-500 cursor-pointer">
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
                   </div>
-                )}
+                  
+                  <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+                    {projectTasks.length === 0 ? (
+                      <div className="flex flex-col items-center text-center mt-10 text-slate-500 dark:text-slate-400">
+                        <CheckSquare className="w-10 h-10 mb-3 opacity-30" />
+                        <p className="text-xs font-medium">Belum ada tugas project.<br/><br/>Blok teks di editor samping, lalu pilih "Jadikan Target Project" untuk mulai memecah tugas skripsimu!</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {projectTasks.map(task => (
+                          <div key={task.id} className={`p-3 rounded-xl border transition-all ${task.completed ? 'bg-slate-50 border-slate-200 opacity-60 dark:bg-slate-800 dark:border-slate-700' : 'bg-white border-rose-200 dark:bg-slate-800 dark:border-rose-500/30 shadow-sm hover:border-rose-300'}`}>
+                            <div className="flex items-start gap-3">
+                              <button onClick={() => toggleProjectTask(task.id)} className={`mt-0.5 shrink-0 rounded-full w-5 h-5 flex items-center justify-center border transition-colors cursor-pointer ${task.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500'}`}>
+                                {task.completed && <Check className="w-3 h-3" strokeWidth={3} />}
+                              </button>
+                              <p className={`text-sm font-semibold leading-snug ${task.completed ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>{task.title}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
 
           <div className="absolute bottom-4 right-4 md:bottom-6 md:right-8 flex gap-2">
-            <button onClick={handleOpenModal} className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all flex items-center justify-center cursor-pointer group"><Plus className="w-6 h-6" strokeWidth={2.5} /></button>
+            <button onClick={handleOpenModal} className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition-all flex items-center justify-center cursor-pointer group z-50">
+              <Plus className="w-6 h-6" strokeWidth={2.5} />
+            </button>
           </div>
         </main>
 
+        {/* MODAL BUAT HALAMAN (DENGAN TEMPLATE) */}
         {isModalOpen && createPortal(
           <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in">
             <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-full max-w-md border border-white dark:border-slate-700 overflow-hidden animate-fade-in-up">
               <div className="bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 border-b border-indigo-100 dark:border-indigo-500/20 px-6 py-5 flex items-center gap-3">
                 <NekoMascotMini className="w-12 h-12 shrink-0" />
                 <div className="relative bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-2xl rounded-tl-none px-4 py-2">
-                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 italic">"Mau nulis apa hari ini? Nyaa~ 📚"</p>
+                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 italic">"Mau nulis catatan biasa, atau nyicil skripsi nih? Nyaa~ 🎓"</p>
                 </div>
               </div>
               <div className="p-8">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-6"><FilePlus className="w-6 h-6 text-indigo-600 dark:text-indigo-400" /> Buat Catatan Baru</h3>
-                <form onSubmit={confirmCreateNewPage}>
-                  <div className="mb-8">
-                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest">Nama Catatan / File</label>
-                    <input type="text" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Misal: Catatan Rapat BEM" autoFocus className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white font-bold transition-all text-sm" />
-                  </div>
-                  <div className="flex justify-end gap-3">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">Batal</button>
-                    <button type="submit" className="px-6 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md cursor-pointer">Buat Dokumen</button>
-                  </div>
-                </form>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-6">
+                  <FilePlus className="w-6 h-6 text-indigo-600 dark:text-indigo-400" /> Dokumen Baru
+                </h3>
+                <div className="mb-6">
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest">Nama Dokumen</label>
+                  <input type="text" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Misal: Draf Bab 1" autoFocus className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white font-bold transition-all text-sm" />
+                </div>
+                
+                <div className="flex flex-col gap-3">
+                  <button onClick={createTemplateSkripsi} className="w-full px-6 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-md cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95">
+                    <Target className="w-5 h-5" /> Gunakan Template Skripsi/Project
+                  </button>
+                  <button onClick={createBlankPage} className="w-full px-6 py-4 rounded-xl font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/30">
+                    <FileText className="w-5 h-5" /> Catatan Kosong
+                  </button>
+                  <button onClick={() => setIsModalOpen(false)} className="mt-2 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">Batal</button>
+                </div>
               </div>
             </div>
           </div>

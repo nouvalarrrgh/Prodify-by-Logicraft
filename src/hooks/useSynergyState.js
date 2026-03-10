@@ -1,0 +1,32 @@
+import { useState, useEffect } from 'react';
+import { getJson } from '../utils/storage'; // Gunakan helper yang sudah kamu buat!
+
+export function useSynergyState() {
+  const [energyCoins, setEnergyCoins] = useState(10);
+  const [balanceState, setBalanceState] = useState('balanced');
+
+  useEffect(() => {
+    const calculateSynergy = () => {
+      // Membaca state dari LocalStorage secara aman
+      const savedState = localStorage.getItem('stuprod_balance_state') || 'balanced';
+      setBalanceState(savedState);
+      
+      // Kalkulasi koin otomatis terpusat di sini
+      if (savedState === 'buffed') {
+        setEnergyCoins(13);
+      } else if (savedState === 'debuffed') {
+        setEnergyCoins(7);
+      } else {
+        setEnergyCoins(10);
+      }
+    };
+
+    calculateSynergy();
+    
+    // Auto-update jika ada perubahan dari tab/komponen lain
+    window.addEventListener('storage', calculateSynergy);
+    return () => window.removeEventListener('storage', calculateSynergy);
+  }, []);
+
+  return { energyCoins, balanceState };
+}
