@@ -6,6 +6,9 @@ import {
 } from "lucide-react";
 import { NekoMascotMini, NekoMascotFull } from './NekoMascot';
 
+// IMPORT STORAGE AMAN
+import { getJson, setJson } from '../utils/storage';
+
 const formatDateStr = (dateObj) => {
   const d = new Date(dateObj);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -15,11 +18,8 @@ const formatDateStr = (dateObj) => {
 const Habits = () => {
   const [activeDate, setActiveDate] = useState(formatDateStr(new Date()));
 
-  const [habits, setHabits] = useState(() => {
-    const saved = localStorage.getItem("stuprod_habits_v4");
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  // 1. Inisialisasi dengan getJson yang kebal crash
+  const [habits, setHabits] = useState(() => getJson("stuprod_habits_v4", []));
 
   const [balanceState, setBalanceState] = useState(() => {
     return localStorage.getItem("stuprod_balance_state") || "balanced";
@@ -31,32 +31,73 @@ const Habits = () => {
   const [newHabitPillar, setNewHabitPillar] = useState("cognitive");
   const [newHabitTarget, setNewHabitTarget] = useState(1);
 
-  const [habitNotes, setHabitNotes] = useState(() => {
-    const saved = localStorage.getItem("stuprod_habit_notes");
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  const [weeklyReflections, setWeeklyReflections] = useState(() => {
-    const saved = localStorage.getItem("stuprod_weekly_reflections_v2");
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [habitNotes, setHabitNotes] = useState(() => getJson("stuprod_habit_notes", {}));
+  const [weeklyReflections, setWeeklyReflections] = useState(() => getJson("stuprod_weekly_reflections_v2", {}));
 
   const [activeDetailHabit, setActiveDetailHabit] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showWeeklyReport, setShowWeeklyReport] = useState(false);
-
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // ==============================================================================
+  // DOSA 4 DISELESAIKAN: AUTO-VALIDATION STREAK KETIKA HALAMAN DIMUAT
+  // ==============================================================================
   useEffect(() => {
-    localStorage.setItem("stuprod_habit_notes", JSON.stringify(habitNotes));
+    let isModified = false;
+    const todayKey = formatDateStr(new Date());
+    
+    const updatedHabits = habits.map(h => {
+      let currentStreak = 0;
+      let checkDate = new Date();
+      
+      // Hitung mundur ke belakang untuk memvalidasi streak aktual hari ini
+      while (true) {
+        const dKey = formatDateStr(checkDate);
+        if ((h.history?.[dKey] || 0) >= h.targetCount) {
+          currentStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          // Beri toleransi jika hari ini belum selesai, tapi H-1 selesai
+          if (dKey === todayKey && currentStreak === 0) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            const yKey = formatDateStr(checkDate);
+            if ((h.history?.[yKey] || 0) >= h.targetCount) {
+              currentStreak++;
+              checkDate.setDate(checkDate.getDate() - 1);
+              continue;
+            }
+          }
+          break; // Streak benar-benar putus!
+        }
+      }
+
+      // Jika streak yang dihitung berbeda dengan data lama, maka update
+      if (h.streak !== currentStreak) {
+        isModified = true;
+        return { ...h, streak: currentStreak };
+      }
+      return h;
+    });
+
+    // Simpan hanya jika ada habit yang streak-nya hangus/berubah
+    if (isModified) {
+      setHabits(updatedHabits);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Hanya berjalan SATU KALI saat komponen mount
+
+
+  // 2. Gunakan setJson agar aman dan sinkron
+  useEffect(() => {
+    setJson("stuprod_habit_notes", habitNotes);
   }, [habitNotes]);
 
   useEffect(() => {
-    localStorage.setItem("stuprod_weekly_reflections_v2", JSON.stringify(weeklyReflections));
+    setJson("stuprod_weekly_reflections_v2", weeklyReflections);
   }, [weeklyReflections]);
 
   useEffect(() => {
-    localStorage.setItem("stuprod_habits_v4", JSON.stringify(habits));
+    setJson("stuprod_habits_v4", habits);
     const completed = habits.filter((h) => (h.history?.[activeDate] || 0) >= h.targetCount);
     const hasCog = completed.some((h) => h.pillar === "cognitive");
     const hasVit = completed.some((h) => h.pillar === "vitality");
@@ -68,6 +109,7 @@ const Habits = () => {
 
     setBalanceState(newState);
     localStorage.setItem("stuprod_balance_state", newState);
+    window.dispatchEvent(new Event('storage')); // Memicu sinkronisasi Neko/Dashboard
   }, [habits, activeDate]);
 
   const getCurrentCount = (habit, dateStr = activeDate) => {
@@ -133,324 +175,65 @@ const Habits = () => {
 
   const POPULAR_ROUTINES = [
     // --- UMUM & KESEHATAN (Mahasiswa Umum) ---
-    {
-      id: "pr_u1",
-      icon: "🌅",
-      title: "Bangun Pagi Konsisten",
-      pillar: "vitality",
-      target: 1,
-      desc: "Bangun jam 5 pagi tanpa snooze",
-    },
-    {
-      id: "pr_u2",
-      icon: "💧",
-      title: "Hidrasi Penuh",
-      pillar: "vitality",
-      target: 8,
-      desc: "Minum 8 gelas air / hari",
-    },
-    {
-      id: "pr_u3",
-      icon: "🧠",
-      title: "Review Flashcard Belajar",
-      pillar: "cognitive",
-      target: 3,
-      desc: "Sesi spaced repetition materi kelas",
-    },
-    {
-      id: "pr_u4",
-      icon: "🧘",
-      title: "Meditasi Pagi",
-      pillar: "mindfulness",
-      target: 1,
-      desc: "Duduk tenang 5 menit sebelum ngampus",
-    },
+    { id: "pr_u1", icon: "🌅", title: "Bangun Pagi Konsisten", pillar: "vitality", target: 1, desc: "Bangun jam 5 pagi tanpa snooze" },
+    { id: "pr_u2", icon: "💧", title: "Hidrasi Penuh", pillar: "vitality", target: 8, desc: "Minum 8 gelas air / hari" },
+    { id: "pr_u3", icon: "🧠", title: "Review Flashcard Belajar", pillar: "cognitive", target: 3, desc: "Sesi spaced repetition materi kelas" },
+    { id: "pr_u4", icon: "🧘", title: "Meditasi Pagi", pillar: "mindfulness", target: 1, desc: "Duduk tenang 5 menit sebelum ngampus" },
 
     // --- ANAK IT / ILKOM ---
-    {
-      id: "pr_it1",
-      icon: "💻",
-      title: "Latihan Ngoding (Leet)",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Kerjakan 1 algoritma untuk asah logika",
-    },
-    {
-      id: "pr_it2",
-      icon: "🚀",
-      title: "EksplorTech Stack",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Baca dokumentasi framework baru 15 menit",
-    },
+    { id: "pr_it1", icon: "💻", title: "Latihan Ngoding (Leet)", pillar: "cognitive", target: 1, desc: "Kerjakan 1 algoritma untuk asah logika" },
+    { id: "pr_it2", icon: "🚀", title: "EksplorTech Stack", pillar: "cognitive", target: 1, desc: "Baca dokumentasi framework baru 15 menit" },
 
-    // --- ANAK KESENIAN (Seni Rupa, Musik, Tari, Desain) ---
-    {
-      id: "pr_art1",
-      icon: "🎨",
-      title: "Sketsa / Doodling",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Latihan gambar 1 sketsa anatomi / observasi",
-    },
-    {
-      id: "pr_art2",
-      icon: "🎵",
-      title: "Latihan Instrumen/Vokal",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Main tangga nada / pemanasan vokal 30 menit",
-    },
-    {
-      id: "pr_art3",
-      icon: "🕺",
-      title: "Pemanasan Koreografi",
-      pillar: "vitality",
-      target: 1,
-      desc: "Stretching & recall koreografi 15 menit",
-    },
-    {
-      id: "pr_art4",
-      icon: "🎭",
-      title: "Cari Referensi Karya/Moodboard",
-      pillar: "mindfulness",
-      target: 1,
-      desc: "Kumpulkan inspirasi visual/audio tanpa distraksi",
-    },
+    // --- ANAK KESENIAN ---
+    { id: "pr_art1", icon: "🎨", title: "Sketsa / Doodling", pillar: "cognitive", target: 1, desc: "Latihan gambar 1 sketsa anatomi / observasi" },
+    { id: "pr_art2", icon: "🎵", title: "Latihan Instrumen/Vokal", pillar: "cognitive", target: 1, desc: "Main tangga nada / pemanasan vokal 30 menit" },
+    { id: "pr_art3", icon: "🕺", title: "Pemanasan Koreografi", pillar: "vitality", target: 1, desc: "Stretching & recall koreografi 15 menit" },
+    { id: "pr_art4", icon: "🎭", title: "Cari Referensi Karya", pillar: "mindfulness", target: 1, desc: "Kumpulkan inspirasi visual/audio tanpa distraksi" },
 
     // --- ANAK EKONOMI & BISNIS ---
-    {
-      id: "pr_eco1",
-      icon: "📈",
-      title: "Update Berita Ekonomi/Pasar",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Baca berita makro/saham pagi hari (CNBC, dll)",
-    },
-    {
-      id: "pr_eco2",
-      icon: "🧮",
-      title: "Bedah Studi Kasus Bisnis",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Analisis laporan keuangan / strategi 1 brand",
-    },
-    {
-      id: "pr_eco3",
-      icon: "💡",
-      title: "Brainstorming Ide Usaha",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Tulis 5 ide pain-point & draf solusi bisnis",
-    },
+    { id: "pr_eco1", icon: "📈", title: "Update Berita Ekonomi/Pasar", pillar: "cognitive", target: 1, desc: "Baca berita makro/saham pagi hari (CNBC, dll)" },
+    { id: "pr_eco2", icon: "🧮", title: "Bedah Studi Kasus Bisnis", pillar: "cognitive", target: 1, desc: "Analisis laporan keuangan / strategi 1 brand" },
+    { id: "pr_eco3", icon: "💡", title: "Brainstorming Ide Usaha", pillar: "cognitive", target: 1, desc: "Tulis 5 ide pain-point & draf solusi bisnis" },
 
     // --- ANAK PENDIDIKAN / KEGURUAN ---
-    {
-      id: "pr_edu1",
-      icon: "📝",
-      title: "Rancang Lesson Plan",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Buat 1 draf RPP / alat peraga ajar interaktif",
-    },
-    {
-      id: "pr_edu2",
-      icon: "🗣️",
-      title: "Latihan Microteaching",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Latihan intonasi & presentasi kelas depan kaca",
-    },
-    {
-      id: "pr_edu3",
-      icon: "📚",
-      title: "Review Jurnal Pedagogi",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Baca 1 artikel metode/psikologi pendidikan anak",
-    },
+    { id: "pr_edu1", icon: "📝", title: "Rancang Lesson Plan", pillar: "cognitive", target: 1, desc: "Buat 1 draf RPP / alat peraga ajar interaktif" },
+    { id: "pr_edu2", icon: "🗣️", title: "Latihan Microteaching", pillar: "cognitive", target: 1, desc: "Latihan intonasi & presentasi kelas depan kaca" },
+    { id: "pr_edu3", icon: "📚", title: "Review Jurnal Pedagogi", pillar: "cognitive", target: 1, desc: "Baca 1 artikel metode/psikologi pendidikan anak" },
 
     // --- ANAK KEOLAHRAGAAN (FIK) ---
-    {
-      id: "pr_sport1",
-      icon: "🏃‍♂️",
-      title: "Latihan Fisik Inti",
-      pillar: "vitality",
-      target: 1,
-      desc: "Workout 45 menit untuk maintenance kebugaran",
-    },
-    {
-      id: "pr_sport2",
-      icon: "💪",
-      title: "Stretching Khusus",
-      pillar: "vitality",
-      target: 2,
-      desc: "Peregangan otot preventif cedera sesudah latihan",
-    },
-    {
-      id: "pr_sport3",
-      icon: "🥗",
-      title: "Cek Kalori & Makro Nutrisi",
-      pillar: "vitality",
-      target: 1,
-      desc: "Catat asupan protein presisi agar target tercapai",
-    },
-    {
-      id: "pr_sport4",
-      icon: "🧊",
-      title: "Cold Exposure / Recovery",
-      pillar: "vitality",
-      target: 1,
-      desc: "Mandi es/air dingin untuk meredakan inflamasi otot",
-    },
+    { id: "pr_sport1", icon: "🏃‍♂️", title: "Latihan Fisik Inti", pillar: "vitality", target: 1, desc: "Workout 45 menit untuk maintenance kebugaran" },
+    { id: "pr_sport2", icon: "💪", title: "Stretching Khusus", pillar: "vitality", target: 2, desc: "Peregangan otot preventif cedera sesudah latihan" },
+    { id: "pr_sport3", icon: "🥗", title: "Cek Kalori & Makro Nutrisi", pillar: "vitality", target: 1, desc: "Catat asupan protein presisi agar target tercapai" },
+    { id: "pr_sport4", icon: "🧊", title: "Cold Exposure / Recovery", pillar: "vitality", target: 1, desc: "Mandi es/air dingin untuk meredakan inflamasi otot" },
 
-    // --- ANAK TEKNIK (Sipil, Mesin, Elektro, Arsi, dll) ---
-    {
-      id: "pr_eng1",
-      icon: "📐",
-      title: "Latihan Kalkulus/Fisika Dasar",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Selesaikan 2 soal hitungan mekanika/arus numerik",
-    },
-    {
-      id: "pr_eng2",
-      icon: "🏗️",
-      title: "Eksplor Software CAD/BIM",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Latihan tool set di AutoCAD, SolidWorks, Revit, dll",
-    },
-    {
-      id: "pr_eng3",
-      icon: "🔌",
-      title: "Oprek Mikrokontroler/Rangkaian",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Simulasi Arduino/Proteus atau solder mini project",
-    },
+    // --- ANAK TEKNIK ---
+    { id: "pr_eng1", icon: "📐", title: "Latihan Kalkulus/Fisika", pillar: "cognitive", target: 1, desc: "Selesaikan 2 soal hitungan mekanika/arus numerik" },
+    { id: "pr_eng2", icon: "🏗️", title: "Eksplor Software CAD/BIM", pillar: "cognitive", target: 1, desc: "Latihan tool set di AutoCAD, SolidWorks, Revit, dll" },
+    { id: "pr_eng3", icon: "🔌", title: "Oprek Mikrokontroler", pillar: "cognitive", target: 1, desc: "Simulasi Arduino/Proteus atau solder mini project" },
 
     // --- ANAK HUKUM ---
-    {
-      id: "pr_law1",
-      icon: "⚖️",
-      title: "Bedah Ratio Decidendi",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Analisis landasan hukum dari 1 putusan pengadilan",
-    },
-    {
-      id: "pr_law2",
-      icon: "辩",
-      title: "Latihan Legal Drafting/Debat",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Susun kerangka argumen legal standing isu terkini",
-    },
-    {
-      id: "pr_law3",
-      icon: "📖",
-      title: "Hafalan Pasal Krusial",
-      pillar: "cognitive",
-      target: 2,
-      desc: "Review mendalam 5 pasal penting (KUHPer, KUHP, dll)",
-    },
+    { id: "pr_law1", icon: "⚖️", title: "Bedah Ratio Decidendi", pillar: "cognitive", target: 1, desc: "Analisis landasan hukum dari 1 putusan pengadilan" },
+    { id: "pr_law2", icon: "辩", title: "Latihan Legal Drafting", pillar: "cognitive", target: 1, desc: "Susun kerangka argumen legal standing isu terkini" },
+    { id: "pr_law3", icon: "📖", title: "Hafalan Pasal Krusial", pillar: "cognitive", target: 2, desc: "Review mendalam 5 pasal penting (KUHPer, KUHP, dll)" },
 
-    // --- ANAK FISIP (HI, SosPol, Ilkom, dll) ---
-    {
-      id: "pr_soc1",
-      icon: "📰",
-      title: "Analisis Isu Geopolitik/Sosial",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Kritis bedah 1 artikel opini kebijakan publik/global",
-    },
-    {
-      id: "pr_soc2",
-      icon: "✍️",
-      title: "Latihan Menulis Press Release / Opini",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Drafting 300 kata tanggapan fenomena komunikasi/sosial",
-    },
-    {
-      id: "pr_soc3",
-      icon: "🗣️",
-      title: "Praktik Negosiasi/Diplomasi",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Simulasi roleplay Model UN (MUN) atau argumen kelompok",
-    },
+    // --- ANAK FISIP ---
+    { id: "pr_soc1", icon: "📰", title: "Analisis Isu Geopolitik", pillar: "cognitive", target: 1, desc: "Kritis bedah 1 artikel opini kebijakan publik/global" },
+    { id: "pr_soc2", icon: "✍️", title: "Latihan Menulis Opini", pillar: "cognitive", target: 1, desc: "Drafting 300 kata tanggapan fenomena komunikasi/sosial" },
+    { id: "pr_soc3", icon: "🗣️", title: "Praktik Negosiasi", pillar: "cognitive", target: 1, desc: "Simulasi roleplay Model UN (MUN) atau argumen kelompok" },
 
-    // --- ANAK FMIPA (Matematika, Biologi, Kimia, Fisika) ---
-    {
-      id: "pr_sci1",
-      icon: "🔬",
-      title: "Review Teorema/Mekanisme",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Tulis & buktikan ulang 1 rumus sakti / jalur metabolisme",
-    },
-    {
-      id: "pr_sci2",
-      icon: "🧪",
-      title: "Bedah Jurnal Sains Scopus",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Analisis setup eksperimen & hasil dari 1 paper riset Q1",
-    },
-    {
-      id: "pr_sci3",
-      icon: "📊",
-      title: "Latihan Olah Data Statistik",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Visualisasi dataset eksperimen menggunakan R / Python / SPSS",
-    },
+    // --- ANAK FMIPA ---
+    { id: "pr_sci1", icon: "🔬", title: "Review Teorema", pillar: "cognitive", target: 1, desc: "Tulis & buktikan ulang 1 rumus sakti / jalur metabolisme" },
+    { id: "pr_sci2", icon: "🧪", title: "Bedah Jurnal Sains", pillar: "cognitive", target: 1, desc: "Analisis setup eksperimen & hasil dari 1 paper riset Q1" },
+    { id: "pr_sci3", icon: "📊", title: "Latihan Olah Data", pillar: "cognitive", target: 1, desc: "Visualisasi dataset eksperimen menggunakan R / Python / SPSS" },
 
-    // --- ANAK KESEHATAN (Kedokteran, Keperawatan, Farmasi) ---
-    {
-      id: "pr_med1",
-      icon: "⚕️",
-      title: "Review Anatomi/Farmakologi",
-      pillar: "cognitive",
-      target: 2,
-      desc: "Hafalkan sistem jaringan, letak tulang / list dosis obat kritis",
-    },
-    {
-      id: "pr_med2",
-      icon: "🩺",
-      title: "Simulasi Anamnesis Kasus",
-      pillar: "cognitive",
-      target: 1,
-      desc: "Baca, diagnosis, & buat timeline dari 1 clinical case (Skill Lab)",
-    },
+    // --- ANAK KESEHATAN ---
+    { id: "pr_med1", icon: "⚕️", title: "Review Anatomi", pillar: "cognitive", target: 2, desc: "Hafalkan sistem jaringan, letak tulang / list dosis obat" },
+    { id: "pr_med2", icon: "🩺", title: "Simulasi Anamnesis Kasus", pillar: "cognitive", target: 1, desc: "Baca, diagnosis, & buat timeline dari 1 clinical case" },
 
-    // --- MINDFULNESS & ME-TIME (Semua Jurusan) ---
-    {
-      id: "pr_mind1",
-      icon: "📓",
-      title: "Gratitude Journaling",
-      pillar: "mindfulness",
-      target: 1,
-      desc: "Tulis 3 pencapaian kecil & hal yang membuatmu tersenyum hari ini",
-    },
-    {
-      id: "pr_mind2",
-      icon: "📵",
-      title: "Digital Detox Malam",
-      pillar: "mindfulness",
-      target: 1,
-      desc: "1 jam sebelum tidur stop scrolling medsos / jauhi layar biru",
-    },
-    {
-      id: "pr_mind3",
-      icon: "☕",
-      title: "Savoring Pagi Hari",
-      pillar: "mindfulness",
-      target: 1,
-      desc: "Nikmati perlahan hangatnya sarapan/pagi tanpa pegang HP",
-    },
+    // --- MINDFULNESS & ME-TIME ---
+    { id: "pr_mind1", icon: "📓", title: "Gratitude Journaling", pillar: "mindfulness", target: 1, desc: "Tulis 3 pencapaian kecil & hal yang membuatmu tersenyum" },
+    { id: "pr_mind2", icon: "📵", title: "Digital Detox Malam", pillar: "mindfulness", target: 1, desc: "1 jam sebelum tidur stop scrolling medsos" },
+    { id: "pr_mind3", icon: "☕", title: "Savoring Pagi Hari", pillar: "mindfulness", target: 1, desc: "Nikmati perlahan hangatnya sarapan tanpa pegang HP" },
   ];
 
   const handleApplyRoutine = (routine) => {
