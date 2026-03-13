@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layers, BarChart2, BookOpen, CalendarDays, Focus, Bell, Search, Menu, X, ChevronRight, Settings as SettingsIcon, Star, ShieldCheck, Zap, CheckCircle2 } from 'lucide-react';
+import { Layers, BarChart2, BookOpen, CalendarDays, Focus, Bell, Search, Menu, X, ChevronRight, Settings as SettingsIcon, Star, ShieldCheck, Zap, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 // IMPORT KOMPONEN LOGIN & LANDING PAGE (Statis)
@@ -26,7 +26,7 @@ const MotionDiv = motion.div;
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [user, setUser] = useState(() => getJson('stuprod_user', null));
+  const [user, setUser] = useState(() => getJson('prodify_user', null));
 
   // STATE UNTUK MENGONTROL ROUTING LANDING PAGE VS LOGIN
   const [showLanding, setShowLanding] = useState(true);
@@ -55,21 +55,21 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [footerModal, setFooterModal] = useState(null);
 
-  const getSettings = () => getJson('stuprod_settings', {});
+  const getSettings = () => getJson('prodify_settings', {});
 
   // INIT DARK MODE & GLOBAL DATA
   const loadGlobalData = useCallback(() => {
-    const settings = getJson('stuprod_settings', {});
+    const settings = getJson('prodify_settings', {});
     if (settings.darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
 
-    const habits = getJson('stuprod_habits_v4', []);
+    const habits = getJson('prodify_habits_v4', []);
     const focusStats = getJson('forest_stats', { planted: 0 });
     const totalExp = (habits.reduce((acc, h) => acc + (h.streak || 0), 0) * 10) + ((focusStats.planted || 0) * 25);
     setUserExp(totalExp);
     setUserLevel(Math.floor(totalExp / 100) + 1);
 
-    const pInfo = getJson('stuprod_profileInfo', {});
+    const pInfo = getJson('prodify_profileInfo', {});
     setProfileAvatar(pInfo.avatar || '');
 
     const fallbackUsername = user?.name ? user.name.toLowerCase().replace(/\s+/g, '') : 'student';
@@ -98,12 +98,12 @@ function App() {
 
   // LOGIKA MUNCULNYA ONBOARDING STATIS
   useEffect(() => {
-    const onboarded = localStorage.getItem('stuprod_onboarded_v1');
+    const onboarded = localStorage.getItem('prodify_onboarded_v1');
     if (!onboarded && user) setShowOnboarding(true);
   }, [user]);
 
   const finishOnboarding = () => {
-    localStorage.setItem('stuprod_onboarded_v1', 'true');
+    localStorage.setItem('prodify_onboarded_v1', 'true');
     setShowOnboarding(false);
   };
 
@@ -114,19 +114,19 @@ function App() {
     }
     const q = searchQuery.toLowerCase();
     let results = [];
-    
+
     const notes = getJson('zen_pages_multi', []);
     notes.forEach(n => { if (n.title.toLowerCase().includes(q)) results.push({ type: 'Catatan', title: n.title, action: 'zennotes' }) });
-    
+
     const mTasks = getJson('matrix_tasks', []);
     mTasks.forEach(t => { if (t.title.toLowerCase().includes(q)) results.push({ type: 'Tugas', title: t.title, action: 'time_manager' }) });
-    
-    const dTasks = getJson('stuprod_tasks', []);
+
+    const dTasks = getJson('prodify_tasks', []);
     dTasks.forEach(t => { if (t.text && t.text.toLowerCase().includes(q)) results.push({ type: 'Deadline', title: t.text, action: 'time_manager' }) });
-    
-    const hData = getJson('stuprod_habits_v4', []);
+
+    const hData = getJson('prodify_habits_v4', []);
     hData.forEach(h => { if (h.title.toLowerCase().includes(q)) results.push({ type: 'Habit', title: h.title, action: 'habits' }) });
-    
+
     setSearchResults(results.slice(0, 5));
     setShowSearchDrop(true);
   }, [searchQuery]);
@@ -144,7 +144,7 @@ function App() {
       const now = new Date().getTime();
 
       if (settings.urgentReminders !== false) {
-        const dTasks = getJson('stuprod_tasks', []);
+        const dTasks = getJson('prodify_tasks', []);
         dTasks.forEach(t => {
           if (!t.completed && t.deadline) {
             const diff = new Date(t.deadline).getTime() - now;
@@ -154,7 +154,7 @@ function App() {
       }
 
       if (settings.habitReminders !== false) {
-        const habits = getJson('stuprod_habits_v4', []);
+        const habits = getJson('prodify_habits_v4', []);
         const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         const dateStr = d.toISOString().split('T')[0];
         let pendingHabits = 0;
@@ -180,11 +180,12 @@ function App() {
     } else {
       return (
         <div className="relative min-h-screen bg-[#050814] text-slate-300">
-          <button 
-            onClick={() => setShowLanding(true)} 
-            className="absolute top-6 left-6 z-50 px-4 py-2 bg-white/5 backdrop-blur-md rounded-xl font-bold text-white border border-white/10 shadow-lg cursor-pointer hover:bg-white/10 hover:border-[#00f0ff]/50 transition-all flex items-center gap-2"
+          <button
+            onClick={() => setShowLanding(true)}
+            className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 px-2.5 py-2 sm:px-4 sm:py-2 bg-slate-900/40 sm:bg-white/5 backdrop-blur-md rounded-full sm:rounded-xl font-bold text-white border border-slate-700/60 sm:border-white/10 shadow-lg cursor-pointer hover:bg-slate-900/60 sm:hover:bg-white/10 hover:border-[#00f0ff]/50 transition-all flex items-center gap-1.5 sm:gap-2"
           >
-            ← Kembali ke Beranda
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Kembali ke Beranda</span>
           </button>
           <Login onLogin={setUser} />
         </div>
@@ -193,8 +194,9 @@ function App() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('stuprod_user');
+    localStorage.removeItem('prodify_user');
     setUser(null);
+    setActiveMenu('dashboard');
     setShowLanding(true);
   };
 
@@ -212,14 +214,14 @@ function App() {
   };
 
   const menuTitles = {
-    dashboard: "Student Intelligence Hub", zennotes: "Smart Notes & Journal", time_manager: "Balance Matrix & Agenda",
+    dashboard: "Student Intelligence Hub", zennotes: "Smart Notes & Journal", time_manager: "Task & Activity Manager",
     focus: "Deep Focus Workspace", habits: "Habit & Synergy Tracker", profile: "Profil Mahasiswa", settings: "Pengaturan Sistem"
   };
 
   const navItems = [
     { key: 'dashboard', icon: <BarChart2 />, label: 'Intelligence Hub', classes: { bg: 'bg-indigo-50 dark:bg-indigo-500/10', text: 'text-indigo-600', activeBg: 'bg-indigo-600', activeText: 'text-white', border: 'border-indigo-200 dark:border-indigo-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(79,70,229,0.5)]' } },
     { key: 'zennotes', icon: <BookOpen />, label: 'Smart Notes', classes: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600', activeBg: 'bg-emerald-500', activeText: 'text-white', border: 'border-emerald-200 dark:border-emerald-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(16,185,129,0.5)]' } },
-    { key: 'time_manager', icon: <CalendarDays />, label: 'Balance Matrix', classes: { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600', activeBg: 'bg-amber-500', activeText: 'text-white', border: 'border-amber-200 dark:border-amber-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(245,158,11,0.5)]' } },
+    { key: 'time_manager', icon: <CalendarDays />, label: 'Task & Activity Manager', classes: { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600', activeBg: 'bg-amber-500', activeText: 'text-white', border: 'border-amber-200 dark:border-amber-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(245,158,11,0.5)]' } },
     { key: 'habits', icon: <Star />, label: 'Habit Tracker', classes: { bg: 'bg-rose-50 dark:bg-rose-500/10', text: 'text-rose-600', activeBg: 'bg-rose-500', activeText: 'text-white', border: 'border-rose-200 dark:border-rose-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(244,63,94,0.5)]' } },
     { key: 'focus', icon: <Focus />, label: 'Deep Focus', classes: { bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-600', activeBg: 'bg-purple-500', activeText: 'text-white', border: 'border-purple-200 dark:border-purple-500/20', shadow: 'shadow-[0_8px_16px_-6px_rgba(168,85,247,0.5)]' } },
   ];
@@ -247,7 +249,7 @@ function App() {
               <div className="absolute inset-0 bg-white/20 rounded-xl blur-[2px] -z-10" />
             </div>
             <h1 className="font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300">
-              Stu<span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">Prod</span>
+              Pro<span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">dify</span>
             </h1>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500">
@@ -398,7 +400,7 @@ function App() {
         {/* Global Sticky Footer */}
         <footer className="absolute bottom-0 left-0 right-0 border-t border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl py-3 px-6 lg:px-10 z-20">
           <div className="flex flex-col md:flex-row items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 max-w-7xl mx-auto">
-            <div>&copy; {new Date().getFullYear()} Stu<span className="text-indigo-600 dark:text-indigo-400">Prod</span>. All rights reserved.</div>
+            <div>&copy; {new Date().getFullYear()} Pro<span className="text-indigo-600 dark:text-indigo-400">dify</span>. All rights reserved.</div>
             <div className="flex items-center gap-4 mt-2 md:mt-0">
               <button onClick={() => setFooterModal('privacy')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer">Privacy</button>
               <button onClick={() => setFooterModal('terms')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer">Terms</button>
@@ -416,7 +418,7 @@ function App() {
               <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-8 text-center relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
                 <Zap className="w-16 h-16 text-yellow-300 mx-auto mb-4 animate-bounce relative z-10" />
-                <h2 className="text-3xl font-black text-white relative z-10">Selamat Datang di StuProd!</h2>
+                <h2 className="text-3xl font-black text-white relative z-10">Selamat Datang di Prodify!</h2>
                 <p className="text-indigo-100 mt-2 font-medium relative z-10">Ekosistem produktivitas yang mengerti kamu.</p>
               </div>
 
@@ -479,7 +481,7 @@ function App() {
                 {footerModal === 'terms' && (
                   <>
                     <p><strong className="text-slate-800 dark:text-white">1. Tanggung Jawab Cache:</strong> Karena data berada di lokal, membersihkan memori *cache* browser Anda berisiko menghapus data aplikasi. Gunakan fitur Export PDF secara berkala untuk pencadangan.</p>
-                    <p><strong className="text-slate-800 dark:text-white">2. Penggunaan Wajar:</strong> Platform StuProd dirancang eksklusif untuk memberdayakan manajemen waktu mahasiswa.</p>
+                    <p><strong className="text-slate-800 dark:text-white">2. Penggunaan Wajar:</strong> Platform Prodify dirancang eksklusif untuk memberdayakan manajemen waktu mahasiswa.</p>
                     <p><strong className="text-slate-800 dark:text-white">3. Aset Kompetisi:</strong> Prototipe ini dikembangkan dengan bangga untuk ajang IFest Web Development Competition 2026.</p>
                   </>
                 )}
@@ -491,7 +493,7 @@ function App() {
                     </div>
                     <ul className="space-y-3">
                       <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" /> <p><strong>Smart Notes:</strong> Ketik apapun, blok teksnya, lalu jadikan otomatis sebagai Task Matrix.</p></li>
-                      <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" /> <p><strong>Balance Matrix:</strong> Geser (*drag and drop*) tugas sesuai skala prioritas mendesak.</p></li>
+                      <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" /> <p><strong>Task & Activity Manager:</strong> Geser (*drag and drop*) tugas sesuai skala prioritas mendesak.</p></li>
                       <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0" /> <p><strong>Deep Focus:</strong> Awas! Jika kamu me-minimize layar (*tab out*), pohonmu akan layu dan mati (Fitur Anti-Cheat).</p></li>
                     </ul>
                   </>
@@ -503,7 +505,7 @@ function App() {
             </div>
           </div>
           , document.body)}
-          
+
         {/* MUNCULKAN NEKO GUIDE HANYA SETELAH ONBOARDING STATIS SELESAI */}
         {user && !showOnboarding && <NekoGuide />}
       </main>

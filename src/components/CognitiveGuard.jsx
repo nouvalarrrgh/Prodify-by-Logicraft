@@ -25,11 +25,11 @@ const CognitiveGuard = () => {
     // =========================================================================
     const checkCognitiveOverload = useCallback(() => {
         // 1. Cek apakah pengguna mengaktifkan fitur ini di Settings
-        const settings = getJson('stuprod_settings', {});
+        const settings = getJson('prodify_settings', {});
         if (!settings.autoCognitiveGuard) return;
 
         // 2. Tentukan batas energi koin maksimal berdasarkan status Synergy hari ini
-        const synergyState = localStorage.getItem('stuprod_balance_state') || 'balanced';
+        const synergyState = localStorage.getItem('prodify_balance_state') || 'balanced';
         const MAX_DAILY_ENERGY = synergyState === 'buffed' ? 13 : synergyState === 'debuffed' ? 7 : 10;
 
         // 3. Hitung total beban energi dari tugas yang dijadwalkan hari ini
@@ -41,10 +41,10 @@ const CognitiveGuard = () => {
         // 4. Jika overload (burnout), panggil sistem pernapasan!
         if (currentDailyEnergy > MAX_DAILY_ENERGY) {
             // Mencegah layar pernapasan muncul berulang kali di hari yang sama (anti-spam)
-            const lastTriggered = localStorage.getItem('stuprod_last_auto_guard');
+            const lastTriggered = localStorage.getItem('prodify_last_auto_guard');
             if (lastTriggered !== todayKey) {
                 setTriggerGuard(true);
-                localStorage.setItem('stuprod_last_auto_guard', todayKey);
+                localStorage.setItem('prodify_last_auto_guard', todayKey);
             }
         }
     }, []);

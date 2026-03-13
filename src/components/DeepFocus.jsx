@@ -26,10 +26,10 @@ const DeepFocus = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const fullscreenRef = useRef(null);
-  
+
   // STATE UNTUK FALLBACK NOTIFICATION (Anti Notif Terblokir)
   const [inAppAlert, setInAppAlert] = useState(null);
-  
+
   // Research Mode Tracker
   const researchTimerRef = useRef(null);
   const [isResearching, setIsResearching] = useState(false);
@@ -37,9 +37,9 @@ const DeepFocus = () => {
   const audioRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [preCountdown, setPreCountdown] = useState(null);
-  
+
   // MENGGUNAKAN getJson (Hardening Level Senior)
-  const [appSettings, setAppSettings] = useState(() => getJson("stuprod_settings", {}));
+  const [appSettings, setAppSettings] = useState(() => getJson("prodify_settings", {}));
 
   useEffect(() => {
     audioRef.current = new Audio("https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3");
@@ -65,9 +65,9 @@ const DeepFocus = () => {
   const [treeState, setTreeState] = useState("idle");
   const [showWarning, setShowWarning] = useState(false);
   const todayKey = `forest_today_${getLocalDateKey()}`;
-  
+
   // Menggunakan default string '0' agar aman saat di-parse
-  const [todaySessions, setTodaySessions] = useState(() => parseInt(localStorage.getItem(todayKey) || '0'));
+  const [todaySessions, setTodaySessions] = useState(() => parseInt(getJson(todayKey, '0')));
 
   // MENGGUNAKAN setJson (Bukan setItem biasa)
   useEffect(() => { setJson("forest_stats", stats); }, [stats]);
@@ -91,21 +91,21 @@ const DeepFocus = () => {
   const triggerResearchMode = useCallback(() => {
     setIsResearching(true);
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+      document.exitFullscreen().catch(() => { });
     }
     if (researchTimerRef.current) clearTimeout(researchTimerRef.current);
-    
+
     // Timer kematian pokok 2 Minit (120000ms) berjalan apabila berada di luar tab
     researchTimerRef.current = setTimeout(() => {
       killTree();
-      
+
       // 1. Coba Notif OS Asli
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("Pohonmu Layu! 🥀", {
           body: "Waktu riset (2 menit) telah habis. Fokusmu terpecah dan pohon indigomu mati.",
         });
       }
-      
+
       // 2. BACKUP VISUAL (Fallback Modal di layar)
       setInAppAlert({
         title: "🚨 Pohon Mati Kelayuan!",
@@ -122,7 +122,7 @@ const DeepFocus = () => {
       researchTimerRef.current = null;
     }
     if (appSettings.strictFocusMode !== false && fullscreenRef.current) {
-      fullscreenRef.current.requestFullscreen().catch(() => {});
+      fullscreenRef.current.requestFullscreen().catch(() => { });
     }
   }, [appSettings.strictFocusMode]);
 
@@ -133,7 +133,7 @@ const DeepFocus = () => {
       // Jika pengguna pindah tab, cetuskan Research Mode & mula pemasa kematian 2 minit
       if (document.hidden && isRunning && treeState === "growing") {
         triggerResearchMode();
-      } 
+      }
       // Jika pengguna kembali ke tab, BATALKAN pemasa kematian, TETAPI BIARKAN MOD JEDA
       // Mereka mesti klik "Lanjut Fokus" secara manual untuk menyambung masa
       else if (!document.hidden && isRunning && treeState === "growing" && isResearching) {
@@ -180,16 +180,16 @@ const DeepFocus = () => {
       setIsRunning(false);
       setTreeState("success");
       setStats((s) => ({ ...s, planted: s.planted + 1 }));
-      
-      const newSessionCount = parseInt(localStorage.getItem(todayKey) || '0') + 1;
-      
+
+      const newSessionCount = parseInt(getJson(todayKey, '0')) + 1;
+
       // Untuk data sederhana (string angka), pakai localStorage biasa saja tidak masalah
       // tapi dispatch event storage agar komponen lain tahu
-      localStorage.setItem(todayKey, String(newSessionCount));
+      setJson(todayKey, String(newSessionCount));
       window.dispatchEvent(new Event('storage'));
-      
+
       setTodaySessions(newSessionCount);
-      
+
       // Beritahu sukses via OS
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("Panen Berhasil! 🌳", { body: "Sesi fokus selesai. Pohonmu tumbuh sempurna!" });
@@ -274,7 +274,7 @@ const DeepFocus = () => {
       <div className={`absolute inset-0 z-0 transition-colors duration-1000 ${treeState === "dead" ? "bg-rose-950/70" : treeState === "success" ? "bg-violet-950/60" : isResearching ? "bg-amber-950/80" : "bg-slate-950/80"}`} />
 
       <div className="relative z-10 w-full max-w-2xl bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 md:p-12 flex flex-col items-center shadow-2xl spatial-shadow">
-        
+
         <div className="flex justify-between items-center w-full mb-8">
           <div className="flex gap-3">
             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 text-indigo-300 font-bold text-xs" title="Pohon Berhasil Ditanam">
@@ -379,7 +379,9 @@ const DeepFocus = () => {
 
       {preCountdown !== null && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl">
-          <span className="text-[12rem] font-black text-white animate-bounce drop-shadow-[0_0_80px_rgba(79,70,229,0.8)] tracking-tighter tabular-nums">{preCountdown}</span>
+          <span className="text-[5rem] sm:text-[8rem] md:text-[12rem] font-black text-white animate-bounce drop-shadow-[0_0_80px_rgba(79,70,229,0.8)] tracking-tighter tabular-nums">
+            {preCountdown}
+          </span>
         </div>
       )}
 
@@ -406,8 +408,8 @@ const DeepFocus = () => {
         <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-rose-600/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl z-[999] animate-bounce min-w-[300px] border border-rose-400 text-center">
           <h4 className="font-black text-lg mb-1">{inAppAlert.title}</h4>
           <p className="text-sm font-medium mb-3">{inAppAlert.message}</p>
-          <button 
-            onClick={() => setInAppAlert(null)} 
+          <button
+            onClick={() => setInAppAlert(null)}
             className="px-4 py-2 bg-white text-rose-600 font-bold rounded-xl hover:bg-rose-50 transition-colors w-full cursor-pointer shadow-sm"
           >
             Saya Mengerti

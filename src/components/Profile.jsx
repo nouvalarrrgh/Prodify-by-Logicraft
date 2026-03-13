@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { User, Mail, GraduationCap, MapPin, Camera, Save, Phone, AtSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, GraduationCap, MapPin, Camera, Save, Phone, AtSign, Flame, Clock, CheckCircle2 } from 'lucide-react';
+import { getJson, setJson } from '../utils/storage';
 
 const getInitialProfile = () => {
     const baseProfile = {
@@ -15,15 +16,14 @@ const getInitialProfile = () => {
         avatar: ''
     };
 
-    const savedInfo = localStorage.getItem('stuprod_profileInfo');
-    const userSession = JSON.parse(localStorage.getItem('stuprod_user') || '{}');
+    const savedInfo = getJson('prodify_profileInfo', null);
+    const userSession = getJson('prodify_user', {});
 
     if (savedInfo) {
-        const parsed = JSON.parse(savedInfo);
-        if (userSession.name) parsed.name = userSession.name;
-        if (userSession.email) parsed.email = userSession.email;
-        if (!parsed.username) parsed.username = (userSession.name || 'student').toLowerCase().replace(/\s+/g, '');
-        return { ...baseProfile, ...parsed };
+        if (userSession.name) savedInfo.name = userSession.name;
+        if (userSession.email) savedInfo.email = userSession.email;
+        if (!savedInfo.username) savedInfo.username = (userSession.name || 'student').toLowerCase().replace(/\s+/g, '');
+        return { ...baseProfile, ...savedInfo };
     }
 
     if (userSession.name) {
@@ -43,6 +43,35 @@ const getInitialProfile = () => {
 export default function Profile() {
     const [profile, setProfile] = useState(getInitialProfile);
     const [isEditing, setIsEditing] = useState(false);
+    const [summary, setSummary] = useState({
+        streak: 0,
+        completedTasks: 0,
+        focusSessionsToday: 0,
+        habitsCount: 0,
+    });
+
+    useEffect(() => {
+        const todayLocal = new Date();
+        todayLocal.setMinutes(todayLocal.getMinutes() - todayLocal.getTimezoneOffset());
+        const todayKey = todayLocal.toISOString().split('T')[0];
+
+        const streakData = getJson('prodify_login_streak', { streak: 0 });
+        const deadlineTasks = getJson('prodify_tasks', []);
+        const matrixTasks = getJson('matrix_tasks', []);
+        const completedTasks = deadlineTasks.filter(t => t.completed).length + matrixTasks.filter(t => t.completed).length;
+
+        let todaySessions = parseInt(getJson(`forest_today_${todayKey}`, '0'));
+        if (Number.isNaN(todaySessions)) todaySessions = 0;
+
+        const habits = getJson('prodify_habits_v4', []);
+
+        setSummary({
+            streak: streakData.streak || 0,
+            completedTasks,
+            focusSessionsToday: todaySessions,
+            habitsCount: habits.length || 0,
+        });
+    }, []);
 
     const handleChange = (e) => {
         setProfile({ ...profile, [e.target.name]: e.target.value });
@@ -51,15 +80,14 @@ export default function Profile() {
     const handleSave = () => {
         // Sanitasi username jika diedit
         const cleanedProfile = { ...profile, username: profile.username.trim().toLowerCase().replace(/\s+/g, '') };
-        localStorage.setItem('stuprod_profileInfo', JSON.stringify(cleanedProfile));
+        setJson('prodify_profileInfo', cleanedProfile);
 
-        const userSession = JSON.parse(localStorage.getItem('stuprod_user') || '{}');
+        const userSession = getJson('prodify_user', {});
         userSession.name = cleanedProfile.name;
-        localStorage.setItem('stuprod_user', JSON.stringify(userSession));
+        setJson('prodify_user', userSession);
 
         setProfile(cleanedProfile);
         setIsEditing(false);
-        window.dispatchEvent(new Event('storage'));
     };
 
     const handleImageUpload = (e) => {
@@ -74,8 +102,7 @@ export default function Profile() {
                 const base64String = reader.result;
                 const updatedProfile = { ...profile, avatar: base64String };
                 setProfile(updatedProfile);
-                localStorage.setItem('stuprod_profileInfo', JSON.stringify(updatedProfile));
-                window.dispatchEvent(new Event('storage'));
+                setJson('prodify_profileInfo', updatedProfile);
             };
             reader.readAsDataURL(file);
         }
@@ -130,8 +157,39 @@ export default function Profile() {
                     </div>
                 </div>
 
-                {/* Details Form */}
-                <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md rounded-[2rem] border border-slate-200 dark:border-slate-700/60 p-6 md:p-8 shadow-sm md:col-span-2 transition-colors">
+                {/* Details + Productivity Snapshot */}
+                <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md rounded-[2rem] border border-slate-200 dark:border-slate-700/60 p-6 md:p-8 shadow-sm md:col-span-2 transition-colors space-y-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <Flame className="w-3.5 h-3.5 text-orange-400" /> Streak Harian
+                            </div>
+                            <p className="text-xl font-black text-slate-800 dark:text-white">{summary.streak}</p>
+                            <p className="text-[10px] text-slate-400">Hari berturut-turut login</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Tugas Selesai
+                            </div>
+                            <p className="text-xl font-black text-slate-800 dark:text-white">{summary.completedTasks}</p>
+                            <p className="text-[10px] text-slate-400">Sejak mulai memakai StuProd</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <Clock className="w-3.5 h-3.5 text-indigo-400" /> Sesi Deep Focus
+                            </div>
+                            <p className="text-xl font-black text-slate-800 dark:text-white">{summary.focusSessionsToday}</p>
+                            <p className="text-[10px] text-slate-400">Sesi hari ini</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <User className="w-3.5 h-3.5 text-violet-400" /> Habit Aktif
+                            </div>
+                            <p className="text-xl font-black text-slate-800 dark:text-white">{summary.habitsCount}</p>
+                            <p className="text-[10px] text-slate-400">Kebiasaan yang sedang kamu latih</p>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="flex flex-col gap-2">
                             <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">

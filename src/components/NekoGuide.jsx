@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check } from 'lucide-react';
 import { NekoMascotMini } from './NekoMascot';
-import { getJson } from '../utils/storage';
+import { getJson, setJson } from '../utils/storage';
 
 export default function NekoGuide() {
   const [step, setStep] = useState(0);
@@ -10,7 +10,7 @@ export default function NekoGuide() {
 
   // Fungsi untuk mengecek progress dipisah menggunakan useCallback agar stabil
   const checkProgress = useCallback(() => {
-    if (localStorage.getItem('stuprod_guide_finished')) {
+    if (getJson('prodify_guide_finished', null)) {
       setIsVisible(false);
       return;
     }
@@ -18,11 +18,11 @@ export default function NekoGuide() {
     // Ambil data real-time menggunakan getJson yang aman (Hardening Level Senior)
     const notes = getJson('zen_pages_multi', []);
     const mTasks = getJson('matrix_tasks', []);
-    const dTasks = getJson('stuprod_tasks', []);
+    const dTasks = getJson('prodify_tasks', []);
     const timeBlocks = getJson('time_blocks', {});
-    const habits = getJson('stuprod_habits_v4', []);
-    const profile = getJson('stuprod_profileInfo', {});
-    const goal = localStorage.getItem('stuprod_global_goal');
+    const habits = getJson('prodify_habits_v4', []);
+    const profile = getJson('prodify_profileInfo', {});
+    const goal = getJson('prodify_global_goal', null);
 
     let currentStep = 1;
 
@@ -31,7 +31,7 @@ export default function NekoGuide() {
       currentStep = 2;
     }
 
-    // Misi 2: Bikin Tugas di Balance Matrix
+    // Misi 2: Bikin Tugas di Task & Activity Manager
     if (currentStep === 2 && (mTasks.length > 0 || dTasks.length > 0)) {
       currentStep = 3;
     }
@@ -57,7 +57,7 @@ export default function NekoGuide() {
 
   useEffect(() => {
     // Cek jika user sudah menyelesaikan onboarding sebelumnya
-    const isFinished = localStorage.getItem('stuprod_guide_finished');
+    const isFinished = getJson('prodify_guide_finished', null);
     if (isFinished) return;
 
     // Tunda kemunculan 1.5 detik agar animasi aplikasi selesai dulu
@@ -78,25 +78,25 @@ export default function NekoGuide() {
   const completeGuide = () => {
     setStep(7); // Masuk ke state selebrasi (Purr-fect!)
     setTimeout(() => {
-      localStorage.setItem('stuprod_guide_finished', 'true');
+      setJson('prodify_guide_finished', 'true');
       setIsVisible(false);
     }, 5000); // Hilang sendiri setelah 5 detik
   };
 
   const skipGuide = () => {
     setIsVisible(false);
-    localStorage.setItem('stuprod_guide_finished', 'true');
+    setJson('prodify_guide_finished', 'true');
   };
 
   const getGuideContent = () => {
     switch (step) {
       case 1: return "Nyaa~! Aku Neko, asistenmu. Yuk mulai! Pergi ke menu Smart Notes dan buat 1 catatan pertamamu.";
-      case 2: return "Catatan tersimpan! Sekarang kelola tugasmu. Buka Balance Matrix dan buat tugas pertamamu di kolom Matriks.";
+      case 2: return "Catatan tersimpan! Sekarang kelola tugasmu. Buka Task & Activity Manager dan buat tugas pertamamu di kolom Matriks.";
       case 3: return "Tugas berhasil dibuat! Agar tidak lupa, jadwalkan tugas tersebut ke Kalender Mingguan dengan menekan baris waktu yang kosong.";
       case 4: return "Tugas terjadwal! Mahasiswa hebat butuh rutinitas. Buka Habit Tracker dan buat satu rutinitas positif harianmu.";
       case 5: return "Hebat! Mari lengkapi identitasmu. Buka menu Profil Mahasiswa dan atur foto profil atau tulis 'Target Utama' kamu semester ini.";
       case 6: return "Satu hal lagi! Buka Pengaturan, coba aktifkan Dark Mode, dan ingat tempat Backup Data. Jika paham, klik tombol di bawah!";
-      case 7: return "Purr-fect! 🎉 Selamat! Kamu sudah menguasai StuProd. Buka menu Intelligence Hub (Dashboard) untuk melihat wujud datamu!";
+      case 7: return "Purr-fect! 🎉 Selamat! Kamu sudah menguasai Prodify. Buka menu Intelligence Hub (Dashboard) untuk melihat wujud datamu!";
       default: return "Selamat datang!";
     }
   };
@@ -104,15 +104,15 @@ export default function NekoGuide() {
   return (
     <AnimatePresence>
       {isVisible && step > 0 && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 50, scale: 0.8 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.8 }}
           className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end pointer-events-none"
         >
           {/* Bubble Chat */}
-          <motion.div 
-            key={step} 
+          <motion.div
+            key={step}
             initial={{ opacity: 0, scale: 0.8, x: 20 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
             className="bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-500/30 shadow-2xl rounded-3xl p-5 mb-4 max-w-[300px] relative pointer-events-auto"
@@ -120,15 +120,15 @@ export default function NekoGuide() {
             <button onClick={skipGuide} className="absolute top-3 right-3 text-slate-400 hover:text-rose-500 cursor-pointer tooltip" title="Lewati Panduan">
               <X className="w-4 h-4" />
             </button>
-            
+
             <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-2 flex items-center gap-1">
               <Sparkles className="w-3 h-3" /> Langkah {step > 6 ? 6 : step} dari 6
             </h4>
-            
+
             <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-relaxed pr-4">
               {getGuideContent()}
             </p>
-            
+
             {step === 6 && (
               <button onClick={completeGuide} className="mt-4 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 active:scale-95">
                 <Check className="w-4 h-4" /> Saya Mengerti
@@ -142,7 +142,7 @@ export default function NekoGuide() {
                 ))}
               </div>
             )}
-            
+
             {/* Segitiga panah chat */}
             <div className="absolute -bottom-3 right-10 w-0 h-0 border-l-[14px] border-l-transparent border-r-[14px] border-r-transparent border-t-[14px] border-t-white dark:border-t-slate-800 drop-shadow-md" />
           </motion.div>

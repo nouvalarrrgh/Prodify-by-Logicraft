@@ -5,8 +5,8 @@ import {
     Download, Upload, Zap, BookOpen, Clock, FileJson, Brain
 } from 'lucide-react';
 
-// Import getJson untuk keamanan akses data
-import { getJson } from '../utils/storage';
+// Import helper storage aman
+import { getJson, setJson } from '../utils/storage';
 
 export default function Settings({ onLogout }) {
     const [settings, setSettings] = useState(() => {
@@ -20,8 +20,8 @@ export default function Settings({ onLogout }) {
             autoSaveNotes: true,      // ZenNotes
             autoCognitiveGuard: false // DITAMBAHKAN: Auto Cognitive Guard (Default False)
         };
-        const saved = localStorage.getItem('stuprod_settings');
-        return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+        const saved = getJson('prodify_settings', null);
+        return saved ? { ...defaults, ...saved } : defaults;
     });
 
     const [savedMessage, setSavedMessage] = useState('');
@@ -37,15 +37,14 @@ export default function Settings({ onLogout }) {
         }
         return (total / 1024 / 1024).toFixed(2); // Konversi byte ke MB
     };
-    
+
     const usedStorageMB = calculateStorage();
     const storagePercent = Math.min((usedStorageMB / 5.0) * 100, 100);
 
     const handleToggle = (key) => {
         const newSettings = { ...settings, [key]: !settings[key] };
         setSettings(newSettings);
-        localStorage.setItem('stuprod_settings', JSON.stringify(newSettings));
-        window.dispatchEvent(new Event('storage'));
+        setJson('prodify_settings', newSettings);
 
         // TRIGGER GLOBAL DARK MODE
         if (key === 'darkMode') {
@@ -70,19 +69,20 @@ export default function Settings({ onLogout }) {
     const handleExportData = () => {
         try {
             const keysToExport = [
-                'stuprod_user', 'stuprod_settings', 'zen_pages_multi', 'matrix_tasks', 
-                'stuprod_tasks', 'time_blocks', 'stuprod_habits_v4', 'forest_stats', 
-                'stuprod_radar_scores', 'stuprod_login_streak', 'stuprod_academic_schedule',
-                'stuprod_profileInfo', 'stuprod_global_goal', 'stuprod_balance_state', 'stuprod_guide_finished'
+                'prodify_user', 'prodify_settings', 'zen_pages_multi', 'matrix_tasks',
+                'prodify_tasks', 'time_blocks', 'prodify_habits_v4', 'forest_stats',
+                'prodify_radar_scores', 'prodify_login_streak', 'prodify_academic_schedule',
+                'prodify_profileInfo', 'prodify_global_goal', 'prodify_balance_state', 'prodify_guide_finished'
             ];
-            
+
+            const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
             const allData = {};
             keysToExport.forEach(key => {
-                const val = localStorage.getItem(key);
+                const val = storageOptions.getItem(key);
                 if (val) {
-                    try { 
-                        allData[key] = JSON.parse(val); 
-                    } catch { 
+                    try {
+                        allData[key] = JSON.parse(val);
+                    } catch {
                         allData[key] = val; // Fallback cerdas untuk data string murni
                     }
                 }
@@ -96,7 +96,7 @@ export default function Settings({ onLogout }) {
             document.body.appendChild(downloadAnchorNode);
             downloadAnchorNode.click();
             downloadAnchorNode.remove();
-            
+
             showNotification("Data berhasil diekspor! (Backup Selesai)");
         } catch (error) {
             alert("Gagal mengekspor data.");
@@ -113,9 +113,10 @@ export default function Settings({ onLogout }) {
         reader.onload = (event) => {
             try {
                 const importedData = JSON.parse(event.target.result);
+                const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
                 Object.keys(importedData).forEach(key => {
                     const valueToStore = typeof importedData[key] === 'object' ? JSON.stringify(importedData[key]) : importedData[key];
-                    localStorage.setItem(key, valueToStore);
+                    storageOptions.setItem(key, valueToStore);
                 });
                 window.dispatchEvent(new Event('storage'));
                 showNotification("Data berhasil dipulihkan! Memuat ulang...");
@@ -128,12 +129,14 @@ export default function Settings({ onLogout }) {
     };
 
     const handleClearLocalData = () => {
-        localStorage.removeItem('stuprod_tasks');
-        localStorage.removeItem('matrix_tasks');
-        localStorage.removeItem('time_blocks');
-        localStorage.removeItem('stuprod_habits_v4');
-        localStorage.removeItem('forest_stats');
-        localStorage.removeItem('zen_pages_multi');
+        // Hapus data fungsional dari Storage yang aktif (Bisa jadi Session di Demo)
+        const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
+        storageOptions.removeItem('prodify_tasks');
+        storageOptions.removeItem('matrix_tasks');
+        storageOptions.removeItem('time_blocks');
+        storageOptions.removeItem('prodify_habits_v4');
+        storageOptions.removeItem('forest_stats');
+        storageOptions.removeItem('zen_pages_multi');
 
         setSavedMessage('Data lokal fungsional berhasil dibersihkan');
         setTimeout(() => setSavedMessage(''), 3000);
@@ -143,14 +146,15 @@ export default function Settings({ onLogout }) {
     // HARD RESET / HAPUS AKUN TOTAL
     const handleDeleteAccount = () => {
         if (window.confirm("PERINGATAN ZONA BAHAYA!\n\nTindakan ini akan melenyapkan SELURUH data produktivitas, catatan, jadwal, profil, dan pengaturan Anda dari browser ini secara permanen. Anda akan dikembalikan ke halaman login.\n\nApakah Anda benar-benar yakin?")) {
-            
+
             // LOGIKA MASTER: Sapu bersih SEMUA key milik StuProd secara dinamis!
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('stuprod_') || key.startsWith('zen_') || key.startsWith('matrix_') || key.startsWith('time_') || key.startsWith('forest_')) {
-                    localStorage.removeItem(key);
+            const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
+            Object.keys(storageOptions).forEach(key => {
+                if (key.startsWith('prodify_') || key.startsWith('zen_') || key.startsWith('matrix_') || key.startsWith('time_') || key.startsWith('forest_')) {
+                    storageOptions.removeItem(key);
                 }
             });
-            
+
             window.dispatchEvent(new Event('storage'));
             alert("Sistem berhasil di-reset. Sampai jumpa kembali!");
             onLogout(); // Panggil fungsi logout dari App.jsx

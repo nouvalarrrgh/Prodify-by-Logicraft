@@ -19,10 +19,10 @@ const Habits = () => {
   const [activeDate, setActiveDate] = useState(formatDateStr(new Date()));
 
   // 1. Inisialisasi dengan getJson yang kebal crash
-  const [habits, setHabits] = useState(() => getJson("stuprod_habits_v4", []));
+  const [habits, setHabits] = useState(() => getJson("prodify_habits_v4", []));
 
   const [balanceState, setBalanceState] = useState(() => {
-    return localStorage.getItem("stuprod_balance_state") || "balanced";
+    return getJson("prodify_balance_state", "balanced");
   });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -31,8 +31,8 @@ const Habits = () => {
   const [newHabitPillar, setNewHabitPillar] = useState("cognitive");
   const [newHabitTarget, setNewHabitTarget] = useState(1);
 
-  const [habitNotes, setHabitNotes] = useState(() => getJson("stuprod_habit_notes", {}));
-  const [weeklyReflections, setWeeklyReflections] = useState(() => getJson("stuprod_weekly_reflections_v2", {}));
+  const [habitNotes, setHabitNotes] = useState(() => getJson("prodify_habit_notes", {}));
+  const [weeklyReflections, setWeeklyReflections] = useState(() => getJson("prodify_weekly_reflections_v2", {}));
 
   const [activeDetailHabit, setActiveDetailHabit] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -45,11 +45,11 @@ const Habits = () => {
   useEffect(() => {
     let isModified = false;
     const todayKey = formatDateStr(new Date());
-    
+
     const updatedHabits = habits.map(h => {
       let currentStreak = 0;
       let checkDate = new Date();
-      
+
       // Hitung mundur ke belakang untuk memvalidasi streak aktual hari ini
       while (true) {
         const dKey = formatDateStr(checkDate);
@@ -83,21 +83,21 @@ const Habits = () => {
     if (isModified) {
       setHabits(updatedHabits);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Hanya berjalan SATU KALI saat komponen mount
 
 
   // 2. Gunakan setJson agar aman dan sinkron
   useEffect(() => {
-    setJson("stuprod_habit_notes", habitNotes);
+    setJson("prodify_habit_notes", habitNotes);
   }, [habitNotes]);
 
   useEffect(() => {
-    setJson("stuprod_weekly_reflections_v2", weeklyReflections);
+    setJson("prodify_weekly_reflections_v2", weeklyReflections);
   }, [weeklyReflections]);
 
   useEffect(() => {
-    setJson("stuprod_habits_v4", habits);
+    setJson("prodify_habits_v4", habits);
     const completed = habits.filter((h) => (h.history?.[activeDate] || 0) >= h.targetCount);
     const hasCog = completed.some((h) => h.pillar === "cognitive");
     const hasVit = completed.some((h) => h.pillar === "vitality");
@@ -108,7 +108,7 @@ const Habits = () => {
     else if (hasCog && !hasVit && !hasMind) newState = "debuffed";
 
     setBalanceState(newState);
-    localStorage.setItem("stuprod_balance_state", newState);
+    setJson("prodify_balance_state", newState);
     window.dispatchEvent(new Event('storage')); // Memicu sinkronisasi Neko/Dashboard
   }, [habits, activeDate]);
 

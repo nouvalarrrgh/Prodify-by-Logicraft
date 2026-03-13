@@ -5,11 +5,13 @@
  */
 export function getJson(key, fallback) {
     try {
-        const raw = localStorage.getItem(key);
+        const isDemoMode = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true';
+        const storageOptions = isDemoMode ? window.sessionStorage : localStorage;
+        const raw = storageOptions.getItem(key);
         if (!raw) return fallback;
         return JSON.parse(raw);
     } catch (e) {
-        console.warn(`[StuProd Storage] Gagal parsing key: ${key}, data mungkin rusak. Menggunakan default.`, e);
+        console.warn(`[Prodify Storage] Gagal parsing key: ${key}, data mungkin rusak. Menggunakan default.`, e);
         return fallback; // Anti White-Screen of Death!
     }
 }
@@ -19,11 +21,13 @@ export function getJson(key, fallback) {
  */
 export function setJson(key, value) {
     try {
-        localStorage.setItem(key, JSON.stringify(value));
+        const isDemoMode = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true';
+        const storageOptions = isDemoMode ? window.sessionStorage : localStorage;
+        storageOptions.setItem(key, JSON.stringify(value));
         // Memicu event agar komponen lain (yang pakai useEffect storage) langsung terupdate tanpa perlu reload!
-        window.dispatchEvent(new Event('storage')); 
+        window.dispatchEvent(new Event('storage'));
     } catch (e) {
-        console.error(`[StuProd Storage] Quota penuh atau error saat menyimpan: ${key}`, e);
+        console.error(`[Prodify Storage] Quota penuh atau error saat menyimpan: ${key}`, e);
         if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
             alert("🚨 PENYIMPANAN LOKAL PENUH!\n\nHarap lakukan backup data di menu Pengaturan dan hapus catatan (Whiteboard) yang sudah tidak terpakai.");
         }
@@ -51,7 +55,7 @@ export function getStorageUsageMB() {
         }
         return (total / 1024 / 1024).toFixed(2);
     } catch (e) {
-        console.error("[StuProd Storage] Gagal menghitung kuota:", e);
+        console.error("[Prodify Storage] Gagal menghitung kuota:", e);
         return "0.00";
     }
 }

@@ -8,7 +8,7 @@ export function useSynergyState() {
   useEffect(() => {
     const calculateSynergy = () => {
       // Membaca state dari LocalStorage secara aman
-      const savedState = localStorage.getItem('stuprod_balance_state') || 'balanced';
+      const savedState = localStorage.getItem('prodify_balance_state') || 'balanced';
       setBalanceState(savedState);
       
       // Kalkulasi koin otomatis terpusat di sini

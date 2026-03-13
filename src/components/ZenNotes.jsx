@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Plus, Layout, FilePlus, FileText, Trash2, Bold, Italic, List, ListOrdered, 
-  Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, 
-  Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type, 
-  RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight, 
-  PaintBucket, Link, Undo, Redo, Target, ChevronRight 
+import {
+  Plus, Layout, FilePlus, FileText, Trash2, Bold, Italic, List, ListOrdered,
+  Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2,
+  Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type,
+  RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight,
+  PaintBucket, Link, Undo, Redo, Target, ChevronRight
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { NekoMascotMini } from './NekoMascot';
@@ -13,13 +13,12 @@ import { getJson, setJson } from '../utils/storage';
 
 const ZenNotes = () => {
   const [pages, setPages] = useState(() => {
-    const saved = localStorage.getItem('zen_pages_multi');
-    return saved ? JSON.parse(saved) : [{ id: 1, title: 'Ide Proyek Akhir', content: '', drawingData: null }];
+    const saved = getJson('zen_pages_multi', null);
+    return saved ? saved : [{ id: 1, title: 'Ide Proyek Akhir', content: '', drawingData: null }];
   });
 
   const [activePageId, setActivePageId] = useState(() => {
-    const saved = localStorage.getItem('zen_pages_multi');
-    const parsed = saved ? JSON.parse(saved) : null;
+    const parsed = getJson('zen_pages_multi', null);
     return parsed && parsed.length > 0 ? parsed[0].id : 1;
   });
 
@@ -40,7 +39,7 @@ const ZenNotes = () => {
   const [currentFontSize, setCurrentFontSize] = useState('3');
   const [searchQuery, setSearchQuery] = useState('');
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
-    const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+    const settings = getJson('prodify_settings', {});
     return settings.autoSaveNotes !== false;
   });
 
@@ -56,6 +55,8 @@ const ZenNotes = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawColor, setDrawColor] = useState('black');
   const [lineWidth, setLineWidth] = useState(4);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [showDrawCursor, setShowDrawCursor] = useState(false);
 
   const activePage = pages.find(p => p.id === activePageId);
   const wordCount = useMemo(() => {
@@ -67,7 +68,7 @@ const ZenNotes = () => {
   // === FITUR BARU: MENGAMBIL DATA TUGAS DARI BALANCE MATRIX ===
   useEffect(() => {
     const loadProjectTasks = () => {
-      const allTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
+      const allTasks = getJson('matrix_tasks', []);
       setProjectTasks(allTasks.filter(t => t.category === 'project'));
     };
     loadProjectTasks();
@@ -78,11 +79,10 @@ const ZenNotes = () => {
 
   // === FITUR BARU: MENCENTANG TUGAS DARI DALAM NOTES ===
   const toggleProjectTask = (id) => {
-    const allTasks = JSON.parse(localStorage.getItem('matrix_tasks') || '[]');
+    const allTasks = getJson('matrix_tasks', []);
     const updated = allTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-    localStorage.setItem('matrix_tasks', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage')); // Memicu pembaruan UI
-    
+    setJson('matrix_tasks', updated);
+
     // Update local state agar instan
     setProjectTasks(updated.filter(t => t.category === 'project'));
   };
@@ -103,13 +103,13 @@ const ZenNotes = () => {
 
   const safeSaveToLocalStorage = (key, data) => {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      setJson(key, data);
       setSaveStatus('Tersimpan Otomatis');
       return true;
     } catch (e) {
       if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
         setSaveStatus('Gagal: Memori Penuh!');
-        alert("🚨 MEMORI LOKAL BROWSER PENUH! 🚨\n\nKarena StuProd mengutamakan privasi (Local-First), penyimpanan browser Anda telah mencapai batas.\n\nSolusi:\n1. Ekspor catatan lama Anda ke PDF.\n2. Hapus halaman catatan lama untuk mengosongkan memori.");
+        alert("🚨 MEMORI LOKAL BROWSER PENUH! 🚨\n\nKarena Prodify mengutamakan privasi (Local-First), penyimpanan browser Anda telah mencapai batas.\n\nSolusi:\n1. Ekspor catatan lama Anda ke PDF.\n2. Hapus halaman catatan lama untuk mengosongkan memori.");
       } else {
         console.error("Terjadi kesalahan sistem saat menyimpan:", e);
       }
@@ -128,7 +128,7 @@ const ZenNotes = () => {
 
   useEffect(() => {
     const syncAutoSaveSetting = () => {
-      const settings = JSON.parse(localStorage.getItem('stuprod_settings') || '{}');
+      const settings = getJson('prodify_settings', {});
       setAutoSaveEnabled(settings.autoSaveNotes !== false);
     };
     window.addEventListener('storage', syncAutoSaveSetting);
@@ -161,7 +161,7 @@ const ZenNotes = () => {
         };
         img.src = activePage.drawingData;
       } else {
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = '#f9fafb';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
     }
@@ -199,6 +199,10 @@ const ZenNotes = () => {
 
   const startDrawing = (e) => {
     if (e.cancelable) e.preventDefault();
+    if (e.clientX != null && e.clientY != null) {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+      setShowDrawCursor(true);
+    }
     const coords = getCoordinates(e);
     if (!coords) return;
     ctxRef.current.beginPath();
@@ -209,6 +213,10 @@ const ZenNotes = () => {
   const draw = (e) => {
     if (!isDrawing) return;
     if (e.cancelable) e.preventDefault();
+    if (e.clientX != null && e.clientY != null) {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+      if (!showDrawCursor) setShowDrawCursor(true);
+    }
     const coords = getCoordinates(e);
     if (!coords) return;
     ctxRef.current.lineTo(coords.x, coords.y);
@@ -223,12 +231,13 @@ const ZenNotes = () => {
       const dataUrl = canvasRef.current.toDataURL('image/webp', 0.5);
       updateActivePage('drawingData', dataUrl);
     }
+    setShowDrawCursor(false);
   };
 
   const clearCanvas = () => {
     if (canvasRef.current && ctxRef.current) {
       const canvas = canvasRef.current;
-      ctxRef.current.fillStyle = 'white';
+      ctxRef.current.fillStyle = '#f9fafb';
       ctxRef.current.fillRect(0, 0, canvas.width, canvas.height);
       updateActivePage('drawingData', null);
     }
@@ -308,7 +317,7 @@ const ZenNotes = () => {
   };
 
   const handleOpenModal = () => { setNewPageTitle(''); setIsModalOpen(true); };
-  
+
   // === FITUR BARU: FUNGSI BUAT CATATAN BIASA ===
   const createBlankPage = (e) => {
     e.preventDefault();
@@ -324,7 +333,7 @@ const ZenNotes = () => {
   const createTemplateSkripsi = (e) => {
     e.preventDefault();
     const title = newPageTitle.trim() || 'Draf Skripsi / Project';
-    
+
     // Ini HTML Template Cerdas yang akan langsung muncul di halaman
     const templateContent = `
       <h1 style="text-align: center;"><strong>[JUDUL SKRIPSI / PROJECT BESAR]</strong></h1>
@@ -351,7 +360,7 @@ const ZenNotes = () => {
     setActivePageId(newPage.id);
     setIsModalOpen(false);
     setSearchQuery('');
-    
+
     // Otomatis buka panel kanan saat membuat Skripsi
     setShowProjectPanel(true);
   };
@@ -418,21 +427,21 @@ const ZenNotes = () => {
   };
 
   const saveToMatrix = () => {
-  const cleanText = selectedText.trim();
-  if (!cleanText) return;
+    const cleanText = selectedText.trim();
+    if (!cleanText) return;
 
-  const existingTasks = getJson('matrix_tasks', []);
-  const taskCategory = showProjectPanel ? 'project' : 'academic'; 
-  const newTask = { id: Date.now().toString(), title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false };
+    const existingTasks = getJson('matrix_tasks', []);
+    const taskCategory = showProjectPanel ? 'project' : 'academic';
+    const newTask = { id: Date.now().toString(), title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false };
 
-  setJson('matrix_tasks', [...existingTasks, newTask]); // ELEGAN DAN OTOMATIS SYNC!
+    setJson('matrix_tasks', [...existingTasks, newTask]); // ELEGAN DAN OTOMATIS SYNC!
 
-  setSaveStatus('Tugas Ditambahkan!');
-  setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
-  setShowTaskPopup(false);
-  setSelectedText('');
-  window.getSelection().removeAllRanges();
-};
+    setSaveStatus('Tugas Ditambahkan!');
+    setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
+    setShowTaskPopup(false);
+    setSelectedText('');
+    window.getSelection().removeAllRanges();
+  };
 
   const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
   const editorClasses = `w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} ${pageOrientation === 'potrait' ? 'max-w-[816px]' : 'max-w-[1056px]'}`;
@@ -515,7 +524,7 @@ const ZenNotes = () => {
               {/* HEADER TOOLBAR ATAS */}
               <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm z-10 shrink-0 gap-4">
                 <input type="text" placeholder="Judul Catatan..." value={activePage?.title || ''} onChange={(e) => updateActivePage('title', e.target.value)} className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white border-none outline-none bg-transparent placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:text-indigo-900 dark:focus:text-indigo-300 w-full transition-colors" />
-                
+
                 <div className="flex items-center gap-3 shrink-0">
                   <span className={`hidden md:inline-block text-[10px] whitespace-nowrap font-bold px-3 py-1.5 rounded-full border transition-colors ${saveStatus === 'Menyimpan...' ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20' : saveStatus.includes('Gagal') ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-500/20' : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20'}`}>
                     {saveStatus}
@@ -526,8 +535,8 @@ const ZenNotes = () => {
                   </button>
 
                   {/* === TOMBOL TOGGLE PROJECT PANEL (BARU) === */}
-                  <button 
-                    onClick={() => setShowProjectPanel(!showProjectPanel)} 
+                  <button
+                    onClick={() => setShowProjectPanel(!showProjectPanel)}
                     className={`flex items-center gap-1.5 p-2 md:px-3 text-xs font-bold rounded-xl border shadow-sm cursor-pointer transition-colors ${showProjectPanel ? 'bg-rose-600 text-white border-rose-500' : 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10'}`}
                   >
                     <Target className="w-4 h-4" /> <span className="hidden md:inline">Target Project</span>
@@ -678,7 +687,7 @@ const ZenNotes = () => {
 
               {/* EDITOR AREA + KANAN PANEL (FLEX CONTAINER) */}
               <div className="flex-1 flex overflow-hidden w-full relative">
-                
+
                 {/* AREA MENGETIK UTAMA */}
                 <div className={`flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 flex justify-center items-start p-4 md:p-8 transition-all duration-300 ${showProjectPanel ? 'md:mr-72' : ''}`}>
                   {noteMode === 'text' ? (
@@ -695,7 +704,7 @@ const ZenNotes = () => {
                       data-placeholder="Mulai menulis jurnal, gagasan, atau draf project di sini..."
                     />
                   ) : (
-                    <div className="w-full max-w-[1056px] bg-white border border-slate-200 shadow-md relative" style={{ minHeight: '700px', cursor: 'crosshair', touchAction: 'none' }}>
+                    <div className="w-full max-w-[1056px] bg-[#f9fafb] border border-slate-200 shadow-md relative" style={{ minHeight: '700px', cursor: 'crosshair', touchAction: 'none' }}>
                       <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #4f46e5 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
                       <canvas
                         ref={canvasRef}
@@ -715,7 +724,7 @@ const ZenNotes = () => {
                   {showTaskPopup && noteMode === 'text' && (
                     <div className="absolute z-50 animate-fade-in-up bg-slate-900 dark:bg-slate-800 border dark:border-slate-700 text-white px-3 py-2 rounded-xl shadow-xl flex items-center gap-2 cursor-pointer hover:bg-indigo-600 transition-colors" style={{ left: `${popupPos.x}px`, top: `${popupPos.y}px`, transform: 'translateX(-50%)' }} onClick={saveToMatrix} onMouseDown={(e) => e.preventDefault()}>
                       <CheckSquare className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold">{showProjectPanel ? 'Jadikan Target Project' : 'Kirim ke Balance Matrix'}</span>
+                      <span className="text-xs font-bold">{showProjectPanel ? 'Jadikan Target Project' : 'Kirim ke Task & Activity Manager'}</span>
                     </div>
                   )}
                 </div>
@@ -730,12 +739,12 @@ const ZenNotes = () => {
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
-                  
+
                   <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
                     {projectTasks.length === 0 ? (
                       <div className="flex flex-col items-center text-center mt-10 text-slate-500 dark:text-slate-400">
                         <CheckSquare className="w-10 h-10 mb-3 opacity-30" />
-                        <p className="text-xs font-medium">Belum ada tugas project.<br/><br/>Blok teks di editor samping, lalu pilih "Jadikan Target Project" untuk mulai memecah tugas skripsimu!</p>
+                        <p className="text-xs font-medium">Belum ada tugas project.<br /><br />Blok teks di editor samping, lalu pilih "Jadikan Target Project" untuk mulai memecah tugas skripsimu!</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -755,6 +764,19 @@ const ZenNotes = () => {
                 </div>
 
               </div>
+
+              {noteMode === 'draw' && showDrawCursor && (
+                <div
+                  className="pointer-events-none fixed z-[9999]"
+                  style={{
+                    left: cursorPos.x,
+                    top: cursorPos.y,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  <div className="w-4 h-4 rounded-full border-2 border-black/80 bg-transparent shadow-sm" />
+                </div>
+              )}
             </div>
           )}
 
@@ -783,7 +805,7 @@ const ZenNotes = () => {
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest">Nama Dokumen</label>
                   <input type="text" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Misal: Draf Bab 1" autoFocus className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-white font-bold transition-all text-sm" />
                 </div>
-                
+
                 <div className="flex flex-col gap-3">
                   <button onClick={createTemplateSkripsi} className="w-full px-6 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-md cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95">
                     <Target className="w-5 h-5" /> Gunakan Template Skripsi/Project

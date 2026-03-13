@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
+import { getJson, setJson } from '../utils/storage';
 
 // Hook pintar untuk mencegah Error jika JSON rusak (Graceful Error Handling)
 export function useLocalStorage(key, initialValue) {
   const [storedValue, setStoredValue] = useState(() => {
     if (typeof window === "undefined") return initialValue;
     try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
+      return getJson(key, initialValue);
     } catch (error) {
-      console.warn(`[StuProd Warn] Membaca localStorage ${key} gagal, menggunakan default.`, error);
+      console.warn(`[Prodify Warn] Membaca storage ${key} gagal, menggunakan default.`, error);
       return initialValue; // Fallback otomatis tanpa merusak aplikasi
     }
   });
@@ -18,11 +18,10 @@ export function useLocalStorage(key, initialValue) {
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
-        window.dispatchEvent(new Event('storage')); // Sinkronisasi antar komponen
+        setJson(key, valueToStore);
       }
     } catch (error) {
-      console.error(`[StuProd Error] Gagal menyimpan ke localStorage: ${key}`, error);
+      console.error(`[Prodify Error] Gagal menyimpan ke storage: ${key}`, error);
     }
   };
 

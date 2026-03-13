@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Radar, Bar } from 'react-chartjs-2';
@@ -12,7 +12,7 @@ import { generateExecutiveReport } from '../utils/ReportGenerator';
 import { NekoMascotMini, NekoMascotFull } from './NekoMascot';
 
 // IMPORT STORAGE DAN CUSTOM HOOK LEVEL DEWA
-import { getJson } from '../utils/storage';
+import { getJson, setJson } from '../utils/storage';
 import { useSynergyState } from '../hooks/useSynergyState';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
@@ -101,6 +101,34 @@ const CATEGORY_META = {
   project: { label: 'Project/Skripsi', color: 'text-rose-600', dot: 'bg-rose-500' },
 };
 
+const QUOTES = [
+  {
+    id: 'discipline-bridge',
+    text: 'Disiplin adalah jembatan antara tujuan dan pencapaian. Kebiasaan kecil hari ini adalah investasi terbesar untuk masa depanmu.',
+    author: 'Jim Rohn',
+  },
+  {
+    id: 'progress-1',
+    text: 'Kemajuan kecil yang konsisten setiap hari selalu mengalahkan ledakan produktivitas satu malam.',
+    author: 'StuProd Coach',
+  },
+  {
+    id: 'focus-1',
+    text: 'Fokus pada satu hal penting hari ini lebih bernilai daripada mencentang sepuluh hal yang tidak krusial.',
+    author: 'Prodify Insight',
+  },
+  {
+    id: 'student-identity',
+    text: 'Tugas, rapat, dan proyek hanyalah medium. Misi utamamu adalah tumbuh menjadi versi dirimu yang lebih matang setiap semester.',
+    author: 'Prodify',
+  },
+  {
+    id: 'rest-balance',
+    text: 'Istirahat yang terencana adalah bagian dari strategi, bukan kemalasan. Otak yang segar melipatgandakan kualitas jam belajarmu.',
+    author: 'Neuro Focus Note',
+  },
+];
+
 const Dashboard = () => {
   // MENGGUNAKAN CUSTOM HOOKS BARU
   const { energyCoins } = useSynergyState();
@@ -120,7 +148,7 @@ const Dashboard = () => {
   // Evaluation
   const [evaluationState, setEvaluationState] = useState('idle');
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [scores, setScores] = useState(() => getJson('stuprod_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 }));
+  const [scores, setScores] = useState(() => getJson('prodify_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 }));
   const [insightText, setInsightText] = useState('');
   const [finalInsight, setFinalInsight] = useState('');
 
@@ -128,13 +156,26 @@ const Dashboard = () => {
   const [heatmap, setHeatmap] = useState(() => Array.from({ length: 48 }, (_, i) => ({
     id: i, date: formatDateStr(new Date(new Date().setDate(new Date().getDate() - (47 - i)))), active: false, intensity: 0, count: 0
   })));
-  
+
   // =========================================================
   // DOSA 3 DISELESAIKAN: ANTI NULL POINTER EXCEPTION
   // =========================================================
-  const userObj = getJson('stuprod_user', { name: 'Mahasiswa' });
+  const userObj = getJson('prodify_user', { name: 'Mahasiswa' });
   const userName = userObj?.name || 'Mahasiswa';
   // =========================================================
+
+  const [customQuote, setCustomQuote] = useState(() => getJson('prodify_custom_quote', ''));
+  const [useCustomQuote, setUseCustomQuote] = useState(() => getJson('prodify_use_custom_quote', false));
+
+  const todayQuote = useMemo(() => {
+    if (useCustomQuote && customQuote.trim()) {
+      return { text: customQuote.trim(), author: 'Quote Pribadi' };
+    }
+    const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    const idx = dayIndex % QUOTES.length;
+    const q = QUOTES[idx];
+    return { text: q.text, author: q.author };
+  }, [useCustomQuote, customQuote]);
 
   const greetingMeta = useMemo(() => {
     const h = new Date().getHours();
@@ -149,11 +190,11 @@ const Dashboard = () => {
     const todayLocal = formatDateStr(new Date());
     const todayUTC = new Date().toISOString().split('T')[0];
 
-    const streakData = getJson('stuprod_login_streak', { lastLogin: '', streak: 0 });
+    const streakData = getJson('prodify_login_streak', { lastLogin: '', streak: 0 });
     setLoginStreak(streakData.streak);
     if (streakData.lastLogin !== todayLocal) setShowCheckInModal(true);
 
-    const deadlineTasks = getJson('stuprod_tasks', []);
+    const deadlineTasks = getJson('prodify_tasks', []);
     const matrixTasks = getJson('matrix_tasks', []);
     const timeBlocks = getJson('time_blocks', {});
 
@@ -173,13 +214,13 @@ const Dashboard = () => {
       percentage: pTasks.length > 0 ? Math.round((completedPTasks / pTasks.length) * 100) : 0
     });
 
-    const allHabits = getJson('stuprod_habits_v4', []);
+    const allHabits = getJson('prodify_habits_v4', []);
     const doneTodayHabits = allHabits.filter(h => (h.history?.[todayLocal] || 0) >= h.targetCount).length;
     setHabitsData({ total: allHabits.length, doneToday: doneTodayHabits });
 
-    let todaySessions = parseInt(localStorage.getItem(`forest_today_${todayUTC}`) || '0');
+    let todaySessions = parseInt(getJson(`forest_today_${todayUTC}`, '0'));
     if (todaySessions === 0 && todayLocal !== todayUTC) {
-      todaySessions = parseInt(localStorage.getItem(`forest_today_${todayLocal}`) || '0');
+      todaySessions = parseInt(getJson(`forest_today_${todayLocal}`, '0'));
     }
     setFocusSessionsToday(todaySessions);
 
@@ -226,7 +267,7 @@ const Dashboard = () => {
       return { id: i, date: ds, count, active: count > 0, intensity: count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : 3 };
     }));
 
-    const savedScores = getJson('stuprod_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 });
+    const savedScores = getJson('prodify_radar_scores', { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 });
     setScores(savedScores);
 
     const is = computeImpactScore(
@@ -259,7 +300,7 @@ const Dashboard = () => {
       setScores(prev => {
         const newScores = { ...prev };
         for (const key in effect) newScores[key] = Math.max(0, Math.min(100, newScores[key] + effect[key]));
-        localStorage.setItem('stuprod_radar_scores', JSON.stringify(newScores));
+        setJson('prodify_radar_scores', newScores);
         window.dispatchEvent(new Event('radarScoreUpdated'));
         return newScores;
       });
@@ -271,7 +312,7 @@ const Dashboard = () => {
   const startEvaluation = () => {
     setEvaluationState('evaluating'); setCurrentQuestion(0);
     const init = { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 };
-    setScores(init); localStorage.setItem('stuprod_radar_scores', JSON.stringify(init));
+    setScores(init); setJson('prodify_radar_scores', init);
     window.dispatchEvent(new Event('radarScoreUpdated'));
     setInsightText(''); setFinalInsight('');
   };
@@ -285,14 +326,14 @@ const Dashboard = () => {
 
   const handleCheckIn = () => {
     const todayLocal = formatDateStr(new Date());
-    const streakData = getJson('stuprod_login_streak', { lastLogin: '', streak: 0 });
+    const streakData = getJson('prodify_login_streak', { lastLogin: '', streak: 0 });
     let newStreak = streakData.streak;
     if (streakData.lastLogin) {
       const diff = Math.ceil(Math.abs(new Date(todayLocal) - new Date(streakData.lastLogin)) / (1000 * 60 * 60 * 24));
       newStreak = diff === 1 ? newStreak + 1 : diff > 1 ? 1 : newStreak;
     } else newStreak = 1;
     setLoginStreak(newStreak);
-    localStorage.setItem('stuprod_login_streak', JSON.stringify({ lastLogin: todayLocal, streak: newStreak }));
+    setJson('prodify_login_streak', { lastLogin: todayLocal, streak: newStreak });
     setShowCheckInModal(false);
     loadAllData();
   };
@@ -331,7 +372,7 @@ const Dashboard = () => {
                 Halo, <span className="text-yellow-300 drop-shadow-md">{userName.charAt(0).toUpperCase() + userName.slice(1)}</span>! 👋
               </h1>
               <p className="text-indigo-100 mt-2 text-sm font-medium max-w-md leading-relaxed">
-                Pusat kendali produktivitasmu. Data real-time dari seluruh modul StuProd tersinkronisasi di sini.
+                Pusat kendali produktivitasmu. Data real-time dari seluruh modul Prodify tersinkronisasi di sini.
               </p>
 
               {/* Quick Stats Row */}
@@ -418,7 +459,7 @@ const Dashboard = () => {
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
-            
+
             {dynamicInsight && (
               <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-4 flex-1 shadow-sm flex flex-col justify-center">
                 <span className="text-2xl block mb-1.5">{dynamicInsight.icon}</span>
@@ -455,7 +496,7 @@ const Dashboard = () => {
                 <p className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
                   {projectProgress.completed} dari {projectProgress.total} Tugas Selesai
                 </p>
-                <button 
+                <button
                   onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'zennotes' }))}
                   className="text-[10px] bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/20 px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md">
                   Lanjutkan Menulis ✍️
@@ -515,16 +556,16 @@ const Dashboard = () => {
             {evaluationState === 'evaluating' && <div className="absolute inset-0 bg-gradient-to-t from-indigo-50/80 dark:from-indigo-900/40 to-transparent pointer-events-none animate-fade-in" />}
 
             <div className="w-full flex-1 flex flex-col items-center justify-center z-10">
-              
+
               {evaluationState === 'idle' && (
                 <div className="flex flex-col items-center text-center animate-fade-in-up w-full">
                   <NekoMascotMini className="w-32 h-32 object-contain relative z-10 animate-bounce drop-shadow-sm" />
-                  
+
                   <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm w-full relative z-0 mt-2">
                     <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-white dark:border-b-slate-800" />
                     <p className="text-sm font-bold text-slate-700 dark:text-slate-200 mt-1">"Mau tahu sejauh mana keseimbangan hidupmu minggu ini? Yuk ngobrol, Nyaa~!"</p>
                   </div>
-                  
+
                   <button data-html2canvas-ignore="true" onClick={startEvaluation}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-95 shadow-lg shadow-indigo-600/30 text-sm cursor-pointer mt-5">
                     Mulai Evaluasi Cepat
@@ -536,13 +577,13 @@ const Dashboard = () => {
                 <div className="flex flex-col items-center w-full animate-fade-in-up h-full justify-between pb-2">
                   <div className="flex flex-col items-center w-full">
                     <NekoMascotMini className="w-20 h-20 object-contain relative z-10 animate-bounce drop-shadow-sm" />
-                    
+
                     <div className="bg-white/90 dark:bg-slate-800/90 shadow-sm rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/50 w-full text-center relative mb-5 z-0 mt-2">
                       <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-white dark:border-b-slate-800" />
                       <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200 leading-snug mt-1">{evaluationQuestions[currentQuestion].text}</p>
                     </div>
                   </div>
-                  
+
                   <div className="w-full flex flex-col gap-2.5 overflow-y-auto max-h-[180px] custom-scrollbar pr-1">
                     {evaluationQuestions[currentQuestion].type === 'choice' ? (
                       evaluationQuestions[currentQuestion].options.map((opt, idx) => (
@@ -566,7 +607,7 @@ const Dashboard = () => {
                 <div className="flex flex-col items-center w-full animate-fade-in-up h-full">
                   <div className="w-full flex-1 min-h-[180px] relative flex justify-center">
                     <div className="absolute inset-0 max-w-[240px] mx-auto">
-                       <Radar data={radarData} options={radarOptions} />
+                      <Radar data={radarData} options={radarOptions} />
                     </div>
                   </div>
                   <div className="mt-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4 w-full text-center shadow-sm">
@@ -589,7 +630,7 @@ const Dashboard = () => {
           {/* Heatmap */}
           <div className="lg:col-span-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 p-6 rounded-3xl spatial-shadow relative overflow-hidden flex flex-col h-full">
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-full translate-x-1/3 -translate-y-1/3 pointer-events-none" />
-            
+
             <div className="flex items-center justify-between mb-6 relative z-10">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-emerald-100 dark:bg-emerald-500/20 rounded-xl shadow-sm"><LayoutGrid className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /></div>
@@ -621,7 +662,7 @@ const Dashboard = () => {
                   <p className="text-lg font-black text-orange-700 dark:text-orange-500 leading-none">{loginStreak} Hari</p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                 <span className="text-[10px] font-bold text-slate-400 uppercase">Sedikit</span>
                 <div className="flex gap-1">
@@ -636,16 +677,46 @@ const Dashboard = () => {
         </div>
 
         {/* ===== MOTIVATIONAL QUOTE ===== */}
-        <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-3xl p-6 md:p-8 flex items-center gap-6 spatial-shadow group hover:scale-[1.01] transition-transform">
+        <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-6 spatial-shadow group hover:scale-[1.01] transition-transform">
           <div className="shrink-0 text-7xl font-black text-indigo-100 dark:text-indigo-900 leading-none select-none group-hover:text-indigo-200 transition-colors">"</div>
-          <div>
+          <div className="flex-1">
             <p className="text-slate-700 dark:text-slate-200 font-bold italic text-base md:text-lg leading-relaxed">
-              Disiplin adalah jembatan antara tujuan dan pencapaian. Setiap kebiasaan kecil yang kamu bangun hari ini adalah investasi terbesar untuk masa depanmu.
+              {todayQuote.text}
             </p>
             <div className="flex items-center gap-3 mt-4">
               <div className="w-10 h-1 bg-indigo-400 rounded-full" />
-              <p className="text-indigo-600 dark:text-indigo-400 font-black text-sm uppercase tracking-wider">Jim Rohn <span className="text-slate-300 dark:text-slate-600 font-normal ml-1">via StuProd</span></p>
+              <p className="text-indigo-600 dark:text-indigo-400 font-black text-sm uppercase tracking-wider">
+                {todayQuote.author} <span className="text-slate-300 dark:text-slate-600 font-normal ml-1">via Prodify</span>
+              </p>
             </div>
+          </div>
+          <div className="w-full md:w-64 mt-4 md:mt-0">
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+              Quote Pribadi
+            </p>
+            <textarea
+              value={customQuote}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCustomQuote(v);
+                setJson('prodify_custom_quote', v);
+              }}
+              placeholder="Tulis kalimat penyemangat versimu sendiri..."
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-20"
+            />
+            <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={useCustomQuote}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setUseCustomQuote(checked);
+                  setJson('prodify_use_custom_quote', checked);
+                }}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Gunakan sebagai quote utama harian
+            </label>
           </div>
         </div>
 

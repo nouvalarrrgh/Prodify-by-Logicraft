@@ -18,9 +18,11 @@ const EisenhowerMatrix = ({
             <span className="w-9 h-9 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl flex items-center justify-center">
               <Target className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </span>
-            Balance Priority Matrix
+            Task &amp; Activity Manager
           </h2>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1.5 ml-12">Seret dan petakan prioritas agendamu di 4 kuadran ini.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1.5 ml-12">
+            Petakan semua tugas pentingmu di 4 kuadran ini sebelum dimasukkan ke kalender mingguan.
+          </p>
         </div>
 
         <button

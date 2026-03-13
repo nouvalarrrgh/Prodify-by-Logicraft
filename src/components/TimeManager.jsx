@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { DragDropContext } from "@hello-pangea/dnd";
 
 // SATUKAN SEMUA IMPORT ICON KE DALAM SATU BARIS INI:
-import { 
+import {
   Plus, CheckCircle, Target, MoveRight, Layers, Clock, BellRing,
   AlertTriangle, AlertCircle, Trash2, Calendar, X, MapPin
 } from "lucide-react";
@@ -69,7 +69,7 @@ const TimeManager = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  
+
   const [scheduledBlocks, setScheduledBlocks] = useState(() => {
     const parsed = getJson("time_blocks", {});
     const migrated = {};
@@ -85,31 +85,29 @@ const TimeManager = () => {
   const [taskToSchedule, setTaskToSchedule] = useState(null);
   const [scheduleTime, setScheduleTime] = useState("08:00");
   const [scheduleDate, setScheduleDate] = useState(getLocalDateKey());
-  
+
   // === STATE JADWAL AKADEMIK ===
-  const [academicSchedule, setAcademicSchedule] = useState(() => getJson("stuprod_academic_schedule", []));
+  const [academicSchedule, setAcademicSchedule] = useState(() => getJson("prodify_academic_schedule", []));
   const [showAcademicModal, setShowAcademicModal] = useState(false);
   const [newClass, setNewClass] = useState({ dayOfWeek: 1, course: "", startTime: "08:00", endTime: "09:40", sks: 2, location: "" });
 
   // PENGAMAN GLOBAL GOAL (HARDENING)
   const [globalGoal, setGlobalGoal] = useState(() => {
-    return localStorage.getItem("stuprod_global_goal") || "Ketik target IPK/Organisasimu semester ini...";
+    return getJson("prodify_global_goal", "Ketik target IPK/Organisasimu semester ini...");
   });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
 
   // FUNGSI KHUSUS UNTUK MENYIMPAN GLOBAL GOAL DENGAN AMAN
   const saveGlobalGoal = (newGoal) => {
     setGlobalGoal(newGoal);
-    // Menggunakan localStorage biasa tapi disusul dispatchEvent agar NekoGuide terbangun!
-    localStorage.setItem("stuprod_global_goal", newGoal);
-    window.dispatchEvent(new Event('storage'));
+    setJson("prodify_global_goal", newGoal);
   };
 
   const [notif, setNotif] = useState(null);
-  const [appSettings, setAppSettings] = useState(() => getJson("stuprod_settings", {}));
+  const [appSettings, setAppSettings] = useState(() => getJson("prodify_settings", {}));
   const notifyAudioRef = useRef(null);
 
-  const [deadlineTasks, setDeadlineTasks] = useState(() => getJson("stuprod_tasks", []));
+  const [deadlineTasks, setDeadlineTasks] = useState(() => getJson("prodify_tasks", []));
   const [newDeadlineTask, setNewDeadlineTask] = useState("");
   const [newDeadlineTime, setNewDeadlineTime] = useState("");
   const [activeAlert, setActiveAlert] = useState(null);
@@ -135,9 +133,9 @@ const TimeManager = () => {
 
   // PERBAIKAN BUG INFINITE LOOP
   useEffect(() => {
-    const syncSettings = () => setAppSettings(getJson("stuprod_settings", {}));
+    const syncSettings = () => setAppSettings(getJson("prodify_settings", {}));
     const handleStorage = (e) => {
-      if (!e.key || e.key === "stuprod_settings") syncSettings();
+      if (!e.key || e.key === "prodify_settings") syncSettings();
     };
     window.addEventListener("storage", handleStorage);
     syncSettings();
@@ -145,10 +143,10 @@ const TimeManager = () => {
   }, []);
 
   // AUTO SAVES
-  useEffect(() => { setJson("stuprod_tasks", deadlineTasks); }, [deadlineTasks]);
+  useEffect(() => { setJson("prodify_tasks", deadlineTasks); }, [deadlineTasks]);
   useEffect(() => { setJson("matrix_tasks", tasks); }, [tasks]);
   useEffect(() => { setJson("time_blocks", scheduledBlocks); }, [scheduledBlocks]);
-  useEffect(() => { setJson("stuprod_academic_schedule", academicSchedule); }, [academicSchedule]);
+  useEffect(() => { setJson("prodify_academic_schedule", academicSchedule); }, [academicSchedule]);
 
   useEffect(() => {
     const notifEnabled = appSettings.notifications !== false && appSettings.urgentReminders !== false;
@@ -246,6 +244,11 @@ const TimeManager = () => {
     setScheduledBlocks(newBlocks);
   };
 
+  const assignTaskQuadrant = (taskId, quadrantId) => {
+    if (!VALID_QUADRANTS.includes(quadrantId)) return;
+    setTasks(tasks.map((t) => t.id === taskId ? { ...t, quadrant: quadrantId } : t));
+  };
+
   const onDragEnd = (result) => {
     if (!result.destination) return;
     const sourceQuad = result.source.droppableId;
@@ -294,7 +297,7 @@ const TimeManager = () => {
   const next7Days = Array.from({ length: 7 }).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
   const isSameDay = (date1, date2) => { return (date1.getFullYear() === date2.getFullYear() && date1.getMonth() === date2.getMonth() && date1.getDate() === date2.getDate()); };
   const calculateDailyEnergy = (blocks) => { return blocks.reduce((acc, block) => acc + (block.energy || 1), 0); };
-  
+
   const currentDailyEnergy = calculateDailyEnergy(todayBlocks);
   const isBurnout = currentDailyEnergy > MAX_DAILY_ENERGY;
 
@@ -302,18 +305,20 @@ const TimeManager = () => {
     <>
       <div className="min-h-full flex flex-col p-4 md:p-8 animate-fade-in pb-32">
         <div className="w-full max-w-6xl mx-auto space-y-8">
-          
+
           <div className="animated-gradient-border liquid-glass dark:bg-slate-900/60 dark:border-slate-700/50 p-6 md:p-8 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 spatial-shadow transition-colors">
             <div className="flex items-center gap-5 z-10 relative">
               <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-500/20 rounded-2xl flex items-center justify-center border-2 border-indigo-200 dark:border-indigo-500/30 shadow-inner">
                 <Layers className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Time &amp; Task Hub</h1>
-                <p className="text-slate-500 dark:text-slate-400 font-medium text-sm mt-1">Prioritaskan di Matrix, Eksekusi di Kalender.</p>
+                <h1 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Task &amp; Activity Manager</h1>
+                <p className="text-slate-500 dark:text-slate-400 font-medium text-sm mt-1">
+                  Kumpulkan semua tugas, petakan prioritasnya, lalu jalankan di kalender mingguan.
+                </p>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto relative z-10">
               <button
                 onClick={() => setShowAcademicModal(true)}
@@ -330,25 +335,25 @@ const TimeManager = () => {
             </div>
           </div>
 
-          <DeadlineTracker
-            deadlineTasks={deadlineTasks} newDeadlineTask={newDeadlineTask} setNewDeadlineTask={setNewDeadlineTask}
-            newDeadlineTime={newDeadlineTime} setNewDeadlineTime={setNewDeadlineTime} handleAddDeadlineTask={handleAddDeadlineTask}
-            toggleDeadlineTask={toggleDeadlineTask} deleteDeadlineTask={deleteDeadlineTask} transferDeadlineTask={transferDeadlineTask} calculateDeadlineStatus={calculateDeadlineStatus}
-          />
-
           <DragDropContext onDragEnd={onDragEnd}>
+            <EisenhowerMatrix
+              clearCompletedTasks={clearCompletedTasks} quadrants={quadrants} tasks={tasks}
+              openScheduleModal={openScheduleModal} toggleTaskStatus={toggleTaskStatus} deleteTask={deleteTask}
+            />
+
+            <DeadlineTracker
+              deadlineTasks={deadlineTasks} newDeadlineTask={newDeadlineTask} setNewDeadlineTask={setNewDeadlineTask}
+              newDeadlineTime={newDeadlineTime} setNewDeadlineTime={setNewDeadlineTime} handleAddDeadlineTask={handleAddDeadlineTask}
+              toggleDeadlineTask={toggleDeadlineTask} deleteDeadlineTask={deleteDeadlineTask} transferDeadlineTask={transferDeadlineTask} calculateDeadlineStatus={calculateDeadlineStatus}
+            />
+
             <WeeklyCalendar
               next7Days={next7Days} currentDate={currentDate} setCurrentDate={setCurrentDate} isSameDay={isSameDay}
               scheduledBlocks={scheduledBlocks} getDayFormatted={getDayFormatted} todayBlocks={todayBlocks}
               isBurnout={isBurnout} currentDailyEnergy={currentDailyEnergy} MAX_DAILY_ENERGY={MAX_DAILY_ENERGY}
               synergyState={synergyState} tasks={tasks} quadrants={quadrants} removeBlock={removeBlock}
               dateStrKey={dateStrKey} globalGoal={globalGoal} setGlobalGoal={saveGlobalGoal} isEditingGoal={isEditingGoal}
-              setIsEditingGoal={setIsEditingGoal} academicSchedule={academicSchedule}
-            />
-
-            <EisenhowerMatrix
-              clearCompletedTasks={clearCompletedTasks} quadrants={quadrants} tasks={tasks}
-              openScheduleModal={openScheduleModal} toggleTaskStatus={toggleTaskStatus} deleteTask={deleteTask}
+              setIsEditingGoal={setIsEditingGoal} academicSchedule={academicSchedule} onAssignQuadrant={assignTaskQuadrant}
             />
           </DragDropContext>
         </div>
@@ -363,7 +368,7 @@ const TimeManager = () => {
               </h3>
               <button onClick={() => setShowAcademicModal(false)} className="text-slate-400 hover:text-rose-500 cursor-pointer"><X className="w-6 h-6" /></button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
               <form onSubmit={handleAddClass} className="bg-indigo-50/50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 p-5 rounded-2xl mb-6">
                 <h4 className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4">Tambah Mata Kuliah Baru</h4>
@@ -420,15 +425,15 @@ const TimeManager = () => {
                               <div key={c.id} className="flex justify-between items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm">
                                 <div>
                                   <p className="font-bold text-slate-800 dark:text-white text-sm">
-                                    {c.course} 
+                                    {c.course}
                                     {c.sks && <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-1.5 py-0.5 rounded ml-1.5 font-bold">{c.sks} SKS</span>}
                                   </p>
                                   <p className="text-xs text-indigo-500 font-medium flex items-center gap-1 mt-1">
-                                    <Clock className="w-3 h-3" /> {c.startTime} - {c.endTime} 
+                                    <Clock className="w-3 h-3" /> {c.startTime} - {c.endTime}
                                     {c.location && (
                                       <>
-                                        <span className="mx-1 text-slate-300 dark:text-slate-600">•</span> 
-                                        <MapPin className="w-3 h-3"/> {c.location}
+                                        <span className="mx-1 text-slate-300 dark:text-slate-600">•</span>
+                                        <MapPin className="w-3 h-3" /> {c.location}
                                       </>
                                     )}
                                   </p>
@@ -446,13 +451,13 @@ const TimeManager = () => {
             </div>
           </div>
         </div>
-      , document.body)}
+        , document.body)}
 
       {/* MODAL TAMBAH AGENDA (DIUBAH MENJADI BISA DI-SCROLL & RAPI) */}
       {showAddModal && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-fade-in p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
-            
+
             {/* Header Modal - Menempel di atas (Fix) */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
               <h3 className="font-black text-xl text-slate-800 dark:text-white flex items-center gap-2">
@@ -465,14 +470,14 @@ const TimeManager = () => {
 
             {/* Form Container (Flex) */}
             <form onSubmit={handleAddTask} className="flex flex-col flex-1 overflow-hidden">
-              
+
               {/* Bagian Tengah yang Bisa Di-Scroll (overflow-y-auto) */}
               <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Nama Agenda / Tugas</label>
                   <input type="text" required value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Contoh: Meeting dengan Klien" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-medium" autoFocus />
                 </div>
-                
+
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2"><Target className="w-4 h-4 text-indigo-500" /> Kuras Energi</label>
                   <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mb-3">Berapa koin mental yang dibutuhkan untuk agenda ini?</p>
@@ -484,7 +489,7 @@ const TimeManager = () => {
                     ))}
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Peran Utama Agenda</label>
                   <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mb-3">Tandai agenda ini milik peran yang mana.</p>
@@ -498,7 +503,7 @@ const TimeManager = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Footer Modal / Tombol Action - Menempel di bawah (Fix) */}
               <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">Batal</button>
@@ -508,7 +513,7 @@ const TimeManager = () => {
             </form>
           </div>
         </div>
-      , document.body)}
+        , document.body)}
 
       {showScheduleModal && taskToSchedule && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in px-4">

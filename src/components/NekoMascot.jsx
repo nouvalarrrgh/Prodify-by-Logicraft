@@ -8,7 +8,7 @@ export const NekoMascotFull = ({ className, animate }) => {
     return (
         <img
             src="/IMG-20260303-WA0022.png"
-            alt="StuProd Mascot"
+            alt="Prodify Mascot"
             draggable="false"
             // FIX: Titik tengah emas (Sweet Spot). Tidak terlalu raksasa, tidak terlalu mini.
             // w-44 h-44 untuk HP, md:w-56 md:h-56 untuk Laptop/PC.
@@ -25,7 +25,7 @@ export const NekoMascotMini = ({ className }) => {
     return (
         <img
             src="/IMG-20260303-WA0022.png"
-            alt="StuProd Mascot Mini"
+            alt="Prodify Mascot Mini"
             draggable="false"
             // Trik mix-blend untuk memudarkan background putih bawaan PNG
             className={`object-contain transition-all pointer-events-none select-none mix-blend-multiply dark:mix-blend-screen ${className}`}
