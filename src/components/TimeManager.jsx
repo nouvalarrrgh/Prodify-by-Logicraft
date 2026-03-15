@@ -303,7 +303,7 @@ const TimeManager = () => {
 
   return (
     <>
-      <div className="min-h-full flex flex-col p-4 md:p-8 animate-fade-in pb-32">
+      <div className="min-h-full flex flex-col p-4 md:p-8 pb-32">
         <div className="w-full max-w-6xl mx-auto space-y-8">
 
           <div className="animated-gradient-border liquid-glass dark:bg-slate-900/60 dark:border-slate-700/50 p-6 md:p-8 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 spatial-shadow transition-colors">

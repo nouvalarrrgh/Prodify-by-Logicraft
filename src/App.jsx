@@ -407,9 +407,15 @@ function App() {
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 pb-32 relative scroll-smooth custom-scrollbar">
           <Suspense fallback={<PageLoader />}>
             <AnimatePresence mode="wait">
-              <MotionDiv key={activeMenu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="max-w-7xl mx-auto w-full min-h-full">
-                {renderContent()}
-              </MotionDiv>
+              {activeMenu === 'time_manager' ? (
+                <MotionDiv key={activeMenu} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="max-w-7xl mx-auto w-full min-h-full">
+                  {renderContent()}
+                </MotionDiv>
+              ) : (
+                <MotionDiv key={activeMenu} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="max-w-7xl mx-auto w-full min-h-full">
+                  {renderContent()}
+                </MotionDiv>
+              )}
             </AnimatePresence>
           </Suspense>
         </div>

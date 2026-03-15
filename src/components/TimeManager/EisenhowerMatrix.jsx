@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Target, Trash2, GripVertical, Calendar as CalendarIcon, Sparkles, CheckCircle } from 'lucide-react';
 import { Droppable, Draggable } from "@hello-pangea/dnd";
 
@@ -54,48 +55,60 @@ const EisenhowerMatrix = ({
                   {tasks.filter((t) => t.quadrant === quad.id).map((task, index) => (
                     <Draggable key={task.id} draggableId={task.id} index={index}>
                       {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          style={provided.draggableProps.style}
-                          className={`group bg-white/85 dark:bg-slate-800/85 backdrop-blur-sm p-3 rounded-xl shadow-sm border border-slate-100/80 dark:border-slate-700/80 flex items-center gap-2 transition-shadow transition-colors ${snapshot.isDragging ? "shadow-xl scale-105 ring-2 ring-indigo-400 z-50 relative" : "hover:shadow-md hover:-translate-y-0.5"}`}
-                        >
-                          <div {...provided.dragHandleProps} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0">
-                            <GripVertical className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold leading-tight ${task.completed ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-700 dark:text-slate-200"}`}>
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              <button
-                                onClick={() => openScheduleModal(task)}
-                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/20 flex items-center gap-1 transition-colors cursor-pointer"
-                              >
-                                <CalendarIcon className="w-3 h-3" /> Jadwalkan
-                              </button>
-                              {task.tag === "Dari Catatan" && (
-                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                  <Sparkles className="w-3 h-3" /> Catatan
-                                </span>
-                              )}
+                        (() => {
+                          const child = (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              style={{
+                                ...provided.draggableProps.style,
+                                ...(snapshot.isDragging ? { zIndex: 9999 } : null),
+                              }}
+                              className={`group bg-white/85 dark:bg-slate-800/85 backdrop-blur-sm p-3 rounded-xl shadow-sm border border-slate-100/80 dark:border-slate-700/80 flex items-center gap-2 transition-shadow transition-colors ${snapshot.isDragging ? "shadow-xl ring-2 ring-indigo-400 relative" : "hover:shadow-md hover:-translate-y-0.5"}`}
+                            >
+                              <div {...provided.dragHandleProps} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 cursor-grab active:cursor-grabbing shrink-0">
+                                <GripVertical className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-semibold leading-tight ${task.completed ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-700 dark:text-slate-200"}`}>
+                                  {task.title}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                  <button
+                                    onClick={() => openScheduleModal(task)}
+                                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-500/20 flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <CalendarIcon className="w-3 h-3" /> Jadwalkan
+                                  </button>
+                                  {task.tag === "Dari Catatan" && (
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3" /> Catatan
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button
+                                  onClick={() => toggleTaskStatus(task.id)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${task.completed ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "text-slate-300 dark:text-slate-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"}`}
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteTask(task.id)}
+                                  className="p-1.5 rounded-lg text-slate-300 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button
-                              onClick={() => toggleTaskStatus(task.id)}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${task.completed ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "text-slate-300 dark:text-slate-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"}`}
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteTask(task.id)}
-                              className="p-1.5 rounded-lg text-slate-300 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                          );
+
+                          if (snapshot.isDragging && typeof document !== 'undefined') {
+                            return createPortal(child, document.body);
+                          }
+                          return child;
+                        })()
                       )}
                     </Draggable>
                   ))}
