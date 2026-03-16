@@ -2,8 +2,8 @@ Nama Website: Prodify
 Nama Tim: Logicraft
 Dengan Backend: TIDAK
 Daftar Fitur Utama:
-1. Intelligent Dashboard
-2. Eisenhower Time Manager
-3. Deep Focus Timer (dengan Research Mode)
-4. Habit & Energy Tracker
-5. ZenNotes (Focus-Driven Academic Notes)
+1. Intelligence Dashboard (Analitik real-time)
+2. Deep Focus Engine (Timer anti-distraksi dengan Research Mode)
+3. Synergic Habit Tracker (Pembentukan rutinitas berdasar pilar)
+4. Task & Time Manager (Eisenhower Matrix & Auto-Deadline Tracking)
+5. ZenNotes (Editor catatan terintegrasi)
