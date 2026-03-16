@@ -200,6 +200,34 @@ body {
   animation: shimmer 2s infinite;
 }
 
+/* ============================================
+   TOUCH HOVER FIX (Prevent "sticky hover" on mobile)
+   ============================================ */
+@media (hover: none) {
+  /* Disable hover scale/translate transforms on touch devices while preserving other transforms (rotate/skew). */
+  [class*="hover:scale"]:hover {
+    --tw-scale-x: 1 !important;
+    --tw-scale-y: 1 !important;
+  }
+
+  [class*="hover:-translate"]:hover,
+  [class*="hover:translate"]:hover {
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+  }
+
+  .group:hover [class*="group-hover:scale"] {
+    --tw-scale-x: 1 !important;
+    --tw-scale-y: 1 !important;
+  }
+
+  .group:hover [class*="group-hover:-translate"],
+  .group:hover [class*="group-hover:translate"] {
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+  }
+}
+
 .animate-drift {
   animation: drift 5s ease-in-out infinite;
 }

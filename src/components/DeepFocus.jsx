@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Lottie from "lottie-react";
 import plantData from "../assets/lottie/plant.json";
 import {
-  Play, Trees, Volume2, VolumeX, AlertTriangle, Sprout, Skull, X, Flame, Search
+  Play, Trees, Volume2, VolumeX, AlertTriangle, Sprout, Skull, X, Flame, Search, Brain
 } from "lucide-react";
 
 // IMPORT STORAGE TINGKAT DEWA
@@ -15,6 +15,7 @@ const DURATION_OPTIONS = [
 ];
 
 const FOCUS_SESSION_KEY = 'prodify_deepfocus_session_v1';
+const BRAIN_DUMP_KEY = 'prodify_brain_dump_v1';
 
 const getLocalDateKey = (dateObj = new Date()) => {
   const d = new Date(dateObj);
@@ -29,9 +30,20 @@ const DeepFocus = () => {
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const fullscreenRef = useRef(null);
   const skipPersistOnceRef = useRef(false);
+  const brainDumpToastTimerRef = useRef(null);
 
   // STATE UNTUK FALLBACK NOTIFICATION (Anti Notif Terblokir)
   const [inAppAlert, setInAppAlert] = useState(null);
+  const [brainDumpToast, setBrainDumpToast] = useState(null);
+  const [isBrainDumpOpen, setIsBrainDumpOpen] = useState(true);
+  const [brainDumpText, setBrainDumpText] = useState(() => {
+    try {
+      const v = window.sessionStorage.getItem(BRAIN_DUMP_KEY);
+      return typeof v === "string" ? v : "";
+    } catch {
+      return "";
+    }
+  });
 
   // Research Mode Tracker
   const researchTimerRef = useRef(null);
@@ -61,6 +73,54 @@ const DeepFocus = () => {
         audioRef.current.src = "";
       }
     };
+  }, []);
+
+  useEffect(() => {
+    // Debounced draft persistence without triggering global storage listeners.
+    let t = null;
+    try {
+      t = setTimeout(() => {
+        try { window.sessionStorage.setItem(BRAIN_DUMP_KEY, brainDumpText); } catch { }
+      }, 250);
+    } catch {
+      // ignore
+    }
+    return () => { if (t) clearTimeout(t); };
+  }, [brainDumpText]);
+
+  useEffect(() => {
+    return () => {
+      if (brainDumpToastTimerRef.current) clearTimeout(brainDumpToastTimerRef.current);
+    };
+  }, []);
+
+  const createId = () =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `id_${Math.floor(Math.random() * 1e9)}`;
+
+  const parkDistraction = useCallback((rawText) => {
+    const text = (rawText || "").trim();
+    if (!text) return;
+
+    const existing = getJson("matrix_tasks", []);
+    const newTask = {
+      id: createId(),
+      title: text,
+      quadrant: "not-urgent-not-important",
+      energy: 1,
+      tag: "Distraksi",
+      completed: false,
+      category: "personal",
+      createdAt: new Date().toISOString(),
+    };
+
+    setJson("matrix_tasks", [...existing, newTask]);
+
+    setBrainDumpText("");
+    setBrainDumpToast("Tersimpan ke Eisenhower Matrix: Tunda/Hapus");
+    if (brainDumpToastTimerRef.current) clearTimeout(brainDumpToastTimerRef.current);
+    brainDumpToastTimerRef.current = setTimeout(() => setBrainDumpToast(null), 2200);
   }, []);
 
   // MENGGUNAKAN getJson
@@ -531,6 +591,61 @@ const DeepFocus = () => {
             Saya Mengerti
           </button>
         </div>
+      )}
+
+      {/* ZEIGARNIK INTERCEPTOR: PARKIRAN DISTRAKSI */}
+      {brainDumpToast && (
+        <div className="fixed top-24 right-6 bg-emerald-600/90 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl z-[40] animate-fade-in-up border border-emerald-400/40">
+          <p className="text-xs font-bold">{brainDumpToast}</p>
+        </div>
+      )}
+
+      {isBrainDumpOpen ? (
+        <div className="fixed bottom-6 left-6 right-6 sm:left-auto sm:right-6 sm:w-[380px] z-[30] pointer-events-none">
+          <div className="pointer-events-auto bg-white/10 backdrop-blur-xl border border-white/15 rounded-2xl p-3 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                  <Brain className="w-5 h-5 text-indigo-200" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white font-black text-sm leading-tight">Parkiran Distraksi</p>
+                  <p className="text-[10px] text-slate-300/80 font-semibold leading-tight">Enter untuk kirim ke Matrix (Tunda/Hapus)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBrainDumpOpen(false)}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 transition-colors cursor-pointer"
+                aria-label="Tutup Parkiran Distraksi"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <input
+              value={brainDumpText}
+              onChange={(e) => setBrainDumpText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  parkDistraction(brainDumpText);
+                }
+              }}
+              placeholder="Tulis distraksi singkat, mis: Balas chat dosen..."
+              className="w-full bg-slate-950/30 focus:bg-slate-950/40 border border-white/10 focus:border-indigo-400/40 text-white placeholder:text-slate-300/50 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30"
+            />
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsBrainDumpOpen(true)}
+          className="fixed bottom-6 right-6 z-[30] w-12 h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-500 shadow-[0_15px_40px_rgba(79,70,229,0.35)] border border-indigo-400/30 flex items-center justify-center cursor-pointer"
+          aria-label="Buka Parkiran Distraksi"
+        >
+          <Brain className="w-6 h-6 text-white" />
+        </button>
       )}
     </div>
   );
