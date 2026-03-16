@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Zap, ArrowRight, Target, Shield, ListChecks, Activity,
+  ArrowRight, Target, Shield, ListChecks, Activity,
   CalendarDays, BarChart2, Star, BookOpen, Focus, Flame, ChevronDown
 } from 'lucide-react';
 import { triggerDemoData } from '../utils/demoData';
@@ -80,8 +80,8 @@ export default function LandingPage({ onStart }) {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-[#050814]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 transition-colors">
         <div className="container mx-auto max-w-7xl flex items-center justify-between h-20 px-6">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-2 shadow-lg shadow-indigo-500/20">
-              <Zap className="h-6 w-6 text-white" />
+            <div className="bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-2 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/40">
+              <img src="/brand-logo.png" alt="Prodify Logo" className="h-6 w-6" />
             </div>
             <span className="text-2xl font-black tracking-tight">Prodi<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">fy</span></span>
           </div>
@@ -285,8 +285,8 @@ export default function LandingPage({ onStart }) {
             {/* Brand Column */}
             <div className="sm:col-span-2 lg:col-span-1">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-2 shadow-lg shadow-indigo-500/20">
-                  <Zap className="h-5 w-5 text-white" />
+                <div className="bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-2 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/40">
+                  <img src="/brand-logo.png" alt="Prodify Logo" className="h-5 w-5" />
                 </div>
                 <span className="text-xl font-black tracking-tight">Prodi<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">fy</span></span>
               </div>

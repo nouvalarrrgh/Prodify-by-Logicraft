@@ -392,18 +392,19 @@ body {
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  background: linear-gradient(-45deg, #4F46E5, #0ea5e9, #8B5CF6);
+  /* Softer palette so headers don't look "too neon" on light backgrounds */
+  background: linear-gradient(-45deg, #6366F1, #38BDF8, #A78BFA);
   background-size: 300% 300%;
   animation: fluid-gradient 6s ease infinite;
   z-index: -1;
-  opacity: 0.5;
-  filter: blur(4px);
+  opacity: 0.22;
+  filter: blur(2.5px);
   transition: opacity 0.3s ease;
 }
 
 .animated-gradient-border:hover::before {
-  opacity: 1;
-  filter: blur(8px);
+  opacity: 0.55;
+  filter: blur(6px);
 }
 
 /* 4. Hero 3D floating system */

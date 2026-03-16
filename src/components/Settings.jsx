@@ -7,6 +7,7 @@ import {
 
 // Import helper storage aman
 import { getJson, setJson } from '../utils/storage';
+import { prodifyAlert, prodifyToast } from '../utils/popup';
 
 export default function Settings({ onLogout }) {
     const [settings, setSettings] = useState(() => {
@@ -30,15 +31,23 @@ export default function Settings({ onLogout }) {
 
     // Menghitung estimasi penggunaan LocalStorage secara Real-Time
     const calculateStorage = () => {
-        let total = 0;
-        for (let x in localStorage) {
-            if (!localStorage.hasOwnProperty(x)) continue;
-            total += ((localStorage[x].length + x.length) * 2);
+        // localStorage itu per-origin. Di localhost, beberapa project bisa berbagi origin yang sama.
+        // Jadi hitung hanya key milik aplikasi (prefix Prodify).
+        const prefixes = ['prodify_', 'zen_', 'matrix_', 'forest_', 'time_blocks'];
+        let totalBytes = 0;
+
+        for (let key in localStorage) {
+            if (!Object.prototype.hasOwnProperty.call(localStorage, key)) continue;
+            if (!prefixes.some((p) => key.startsWith(p))) continue;
+            const value = localStorage.getItem(key) || '';
+            totalBytes += ((value.length + key.length) * 2); // UTF-16 (2 bytes per char)
         }
-        return (total / 1024 / 1024).toFixed(2); // Konversi byte ke MB
+
+        return totalBytes / 1024 / 1024; // MB
     };
 
     const usedStorageMB = calculateStorage();
+    const usedStorageMBText = usedStorageMB.toFixed(2);
     const storagePercent = Math.min((usedStorageMB / 5.0) * 100, 100);
 
     const handleToggle = (key) => {
@@ -99,7 +108,7 @@ export default function Settings({ onLogout }) {
 
             showNotification("Data berhasil diekspor! (Backup Selesai)");
         } catch (error) {
-            alert("Gagal mengekspor data.");
+            prodifyAlert({ title: 'Ekspor Gagal', message: 'Gagal mengekspor data.' });
             console.error(error);
         }
     };
@@ -122,7 +131,7 @@ export default function Settings({ onLogout }) {
                 showNotification("Data berhasil dipulihkan! Memuat ulang...");
                 setTimeout(() => window.location.reload(), 1500); // Reload agar seluruh state merender ulang
             } catch (error) {
-                alert("File backup tidak valid atau rusak!");
+                prodifyAlert({ title: 'Impor Gagal', message: 'File backup tidak valid atau rusak.' });
             }
         };
         reader.readAsText(file);
@@ -145,23 +154,18 @@ export default function Settings({ onLogout }) {
 
     // HARD RESET / HAPUS AKUN TOTAL
     const handleDeleteAccount = () => {
-        if (window.confirm("PERINGATAN ZONA BAHAYA!\n\nTindakan ini akan melenyapkan SELURUH data produktivitas, catatan, jadwal, profil, dan pengaturan Anda dari browser ini secara permanen. Anda akan dikembalikan ke halaman login.\n\nApakah Anda benar-benar yakin?")) {
+        // Modal yang membuka tombol ini sudah merupakan konfirmasi eksplisit.
+        const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
+        Object.keys(storageOptions).forEach(key => {
+            if (key.startsWith('prodify_') || key.startsWith('zen_') || key.startsWith('matrix_') || key.startsWith('time_') || key.startsWith('forest_')) {
+                storageOptions.removeItem(key);
+            }
+        });
 
-            // LOGIKA MASTER: Sapu bersih SEMUA key milik Prodify secara dinamis!
-            const storageOptions = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true' ? window.sessionStorage : localStorage;
-            Object.keys(storageOptions).forEach(key => {
-                if (key.startsWith('prodify_') || key.startsWith('zen_') || key.startsWith('matrix_') || key.startsWith('time_') || key.startsWith('forest_')) {
-                    storageOptions.removeItem(key);
-                }
-            });
-
-            window.dispatchEvent(new Event('storage'));
-            alert("Sistem berhasil di-reset. Sampai jumpa kembali!");
-            onLogout(); // Panggil fungsi logout dari App.jsx
-            window.location.reload(); // Memaksa browser memuat ulang dan me-logout user
-        } else {
-            setShowDeleteModal(false);
-        }
+        window.dispatchEvent(new Event('storage'));
+        prodifyToast("Sistem berhasil di-reset. Sampai jumpa kembali!", { variant: 'success' });
+        onLogout();
+        window.location.reload();
     };
 
     return (
@@ -282,7 +286,7 @@ export default function Settings({ onLogout }) {
                             <div className="pb-6 border-b border-slate-100 dark:border-slate-800">
                                 <div className="flex justify-between items-end mb-2">
                                     <p className="text-sm font-bold text-slate-800 dark:text-white">Kapasitas Penyimpanan Lokal</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{usedStorageMB} MB / 5.0 MB</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{usedStorageMBText} MB / 5.0 MB</p>
                                 </div>
                                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 shadow-inner relative overflow-hidden">
                                     <div className={`h-full rounded-full transition-all duration-1000 ${storagePercent > 80 ? 'bg-rose-500' : storagePercent > 50 ? 'bg-amber-500' : 'bg-indigo-600'}`} style={{ width: `${storagePercent}%` }}>

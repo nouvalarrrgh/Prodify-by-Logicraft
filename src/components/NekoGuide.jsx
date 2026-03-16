@@ -5,11 +5,18 @@ import { NekoMascotMini } from './NekoMascot';
 import { getJson, setJson } from '../utils/storage';
 
 export default function NekoGuide() {
+  const isDemoMode = typeof window !== 'undefined' && window.sessionStorage.getItem('isDemoMode') === 'true';
   const [step, setStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
 
   // Fungsi untuk mengecek progress dipisah menggunakan useCallback agar stabil
   const checkProgress = useCallback(() => {
+    if (isDemoMode) {
+      const savedStep = getJson('prodify_demo_guide_step_v1', 1) || 1;
+      setStep(Math.min(7, Math.max(1, savedStep)));
+      return;
+    }
+
     if (getJson('prodify_guide_finished', null)) {
       setIsVisible(false);
       return;
@@ -53,17 +60,22 @@ export default function NekoGuide() {
 
     // Pastikan step tidak mundur (hanya maju)
     setStep(prev => (currentStep > prev ? currentStep : prev));
-  }, []);
+  }, [isDemoMode]);
 
   useEffect(() => {
     // Cek jika user sudah menyelesaikan onboarding sebelumnya
-    const isFinished = getJson('prodify_guide_finished', null);
+    const isFinished = !isDemoMode && getJson('prodify_guide_finished', null);
     if (isFinished) return;
 
     // Tunda kemunculan 1.5 detik agar animasi aplikasi selesai dulu
     const initTimer = setTimeout(() => {
       setIsVisible(true);
-      checkProgress(); // Cek progress pertama kali saat Neko muncul
+      if (isDemoMode) {
+        setJson('prodify_demo_guide_step_v1', 1);
+        setStep(1);
+      } else {
+        checkProgress(); // Cek progress pertama kali saat Neko muncul
+      }
     }, 1500);
 
     // MENGHAPUS BOM WAKTU PERFORMA: setInterval diganti dengan Event Listener!
@@ -73,7 +85,16 @@ export default function NekoGuide() {
       clearTimeout(initTimer);
       window.removeEventListener('storage', checkProgress);
     };
-  }, [checkProgress]);
+  }, [checkProgress, isDemoMode]);
+
+  const nextDemoStep = () => {
+    if (!isDemoMode) return;
+    setStep((prev) => {
+      const next = Math.min(7, (prev || 1) + 1);
+      setJson('prodify_demo_guide_step_v1', next);
+      return next;
+    });
+  };
 
   const completeGuide = () => {
     setStep(7); // Masuk ke state selebrasi (Purr-fect!)
@@ -96,7 +117,7 @@ export default function NekoGuide() {
       case 4: return "Tugas terjadwal! Mahasiswa hebat butuh rutinitas. Buka Habit Tracker dan buat satu rutinitas positif harianmu.";
       case 5: return "Hebat! Mari lengkapi identitasmu. Buka menu Profil Mahasiswa dan atur foto profil atau tulis 'Target Utama' kamu semester ini.";
       case 6: return "Satu hal lagi! Buka Pengaturan, coba aktifkan Dark Mode, dan ingat tempat Backup Data. Jika paham, klik tombol di bawah!";
-      case 7: return "Purr-fect! 🎉 Selamat! Kamu sudah menguasai Prodify. Buka menu Intelligence Hub (Dashboard) untuk melihat wujud datamu!";
+      case 7: return "Purr-fect! Selamat! Kamu sudah menguasai Prodify. Buka menu Intelligence Hub (Dashboard) untuk melihat wujud datamu!";
       default: return "Selamat datang!";
     }
   };
@@ -129,7 +150,25 @@ export default function NekoGuide() {
               {getGuideContent()}
             </p>
 
-            {step === 6 && (
+            {isDemoMode && step < 6 && (
+              <button
+                onClick={nextDemoStep}
+                className="mt-4 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <Check className="w-4 h-4" /> Lanjut
+              </button>
+            )}
+
+            {isDemoMode && step === 6 && (
+              <button
+                onClick={completeGuide}
+                className="mt-4 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <Check className="w-4 h-4" /> Selesai Demo
+              </button>
+            )}
+
+            {!isDemoMode && step === 6 && (
               <button onClick={completeGuide} className="mt-4 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 active:scale-95">
                 <Check className="w-4 h-4" /> Saya Mengerti
               </button>

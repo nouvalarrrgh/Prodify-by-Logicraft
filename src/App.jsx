@@ -11,6 +11,7 @@ import NekoGuide from './components/NekoGuide';
 
 // IMPORT STORAGE TINGKAT DEWA
 import { getJson } from './utils/storage';
+import { makeAvatarDataUri } from './utils/avatar';
 
 // LAZY LOADING KOMPONEN DASHBOARD DLL
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -22,6 +23,15 @@ const Profile = lazy(() => import('./components/Profile'));
 const Settings = lazy(() => import('./components/Settings'));
 
 const MotionDiv = motion.div;
+const APP_MENU_KEYS = new Set([
+  'dashboard',
+  'zennotes',
+  'time_manager',
+  'focus',
+  'habits',
+  'profile',
+  'settings',
+]);
 
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -54,6 +64,49 @@ function App() {
   const [showNotif, setShowNotif] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [footerModal, setFooterModal] = useState(null);
+  const [cognitiveGuardSignal, setCognitiveGuardSignal] = useState(0);
+
+  const getHashKey = useCallback(() => {
+    if (typeof window === 'undefined') return '';
+    return (window.location.hash || '#/').replace(/^#\/?/, '').trim();
+  }, []);
+
+  const setHash = useCallback((key, { replace = false } = {}) => {
+    if (typeof window === 'undefined') return;
+    const next = key ? `#/${key}` : '#/';
+    if (replace) window.history.replaceState(null, '', next);
+    else window.location.hash = `/${key || ''}`;
+  }, []);
+
+  const navigateTo = useCallback((target, opts = {}) => {
+    const { replace = false } = opts;
+    setIsSidebarOpen(false);
+
+    if (!user) {
+      if (target === 'login') {
+        setShowLanding(false);
+        setHash('login', { replace });
+        return;
+      }
+      if (target === 'landing') {
+        setShowLanding(true);
+        setHash('', { replace });
+        return;
+      }
+      setShowLanding(false);
+      setHash('login', { replace });
+      return;
+    }
+
+    if (APP_MENU_KEYS.has(target)) {
+      setActiveMenu(target);
+      setHash(target, { replace });
+    }
+  }, [setHash, user]);
+
+  const triggerCognitiveGuard = useCallback(() => {
+    setCognitiveGuardSignal((n) => n + 1);
+  }, []);
 
   const getSettings = () => getJson('prodify_settings', {});
 
@@ -86,15 +139,27 @@ function App() {
     }
   }, [loadGlobalData]);
 
-  // NAVIGASI GLOBAL
+  // URL HASH SYNC: enables Back/Forward browser history without react-router.
   useEffect(() => {
-    const handleGlobalNav = (e) => {
-      setActiveMenu(e.detail);
-      setIsSidebarOpen(false);
+    const applyFromLocation = () => {
+      const key = getHashKey();
+      if (!user) {
+        setShowLanding(key !== 'login');
+        return;
+      }
+      if (APP_MENU_KEYS.has(key)) setActiveMenu(key);
     };
-    window.addEventListener('navigate', handleGlobalNav);
-    return () => window.removeEventListener('navigate', handleGlobalNav);
-  }, []);
+
+    applyFromLocation();
+    window.addEventListener('hashchange', applyFromLocation);
+    return () => window.removeEventListener('hashchange', applyFromLocation);
+  }, [getHashKey, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const key = getHashKey();
+    if (!APP_MENU_KEYS.has(key)) setHash(activeMenu, { replace: true });
+  }, [activeMenu, getHashKey, setHash, user]);
 
   // LOGIKA MUNCULNYA ONBOARDING STATIS
   useEffect(() => {
@@ -185,7 +250,7 @@ function App() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
           >
-            <LandingPage onStart={() => setShowLanding(false)} />
+            <LandingPage onStart={() => navigateTo('login')} />
           </MotionDiv>
         ) : (
           <MotionDiv
@@ -197,13 +262,13 @@ function App() {
             className="relative min-h-screen bg-[#050814] text-slate-300"
           >
             <button
-              onClick={() => setShowLanding(true)}
+            onClick={() => navigateTo('landing')}
               className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 px-2.5 py-2 sm:px-4 sm:py-2 bg-slate-900/40 sm:bg-white/5 backdrop-blur-md rounded-full sm:rounded-xl font-bold text-white border border-slate-700/60 sm:border-white/10 shadow-lg cursor-pointer hover:bg-slate-900/60 sm:hover:bg-white/10 hover:border-[#00f0ff]/50 transition-all flex items-center gap-1.5 sm:gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Kembali ke Beranda</span>
             </button>
-            <Login onLogin={setUser} />
+            <Login onLogin={(u) => { setUser(u); setActiveMenu('dashboard'); setShowLanding(false); setHash('dashboard', { replace: true }); }} />
           </MotionDiv>
         )}
       </AnimatePresence>
@@ -215,18 +280,19 @@ function App() {
     setUser(null);
     setActiveMenu('dashboard');
     setShowLanding(true);
+    setHash('', { replace: true });
   };
 
   const renderContent = () => {
     switch (activeMenu) {
-      case 'dashboard': return <Dashboard />;
+      case 'dashboard': return <Dashboard onNavigate={navigateTo} onTriggerCognitiveGuard={triggerCognitiveGuard} />;
       case 'zennotes': return <ZenNotes />;
       case 'time_manager': return <TimeManager />;
       case 'focus': return <DeepFocus />;
       case 'habits': return <Habits />;
       case 'profile': return <Profile />;
       case 'settings': return <Settings onLogout={handleLogout} />;
-      default: return <Dashboard />;
+      default: return <Dashboard onNavigate={navigateTo} onTriggerCognitiveGuard={triggerCognitiveGuard} />;
     }
   };
 
@@ -247,7 +313,7 @@ function App() {
 
   return (
     <div className="flex h-[100dvh] flex-1 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-100 transition-colors duration-500 bg-[#F8FAFC] dark:bg-slate-950">
-      <CognitiveGuard />
+      <CognitiveGuard manualTriggerSignal={cognitiveGuardSignal} />
 
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-slate-900/60 z-30 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />
@@ -261,9 +327,8 @@ function App() {
 
         <div className="flex items-center justify-between h-[76px] px-6 border-b border-slate-200/50 dark:border-slate-800/80 shrink-0 relative bg-white/50 dark:bg-slate-900/50 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <div className="relative p-2 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-lg shadow-purple-500/30">
-              <Layers className="w-5 h-5 text-white" />
-              <div className="absolute inset-0 bg-white/20 rounded-xl blur-[2px] -z-10" />
+            <div className="relative p-2 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/40">
+              <img src="/brand-logo.png" alt="Prodify Logo" className="w-6 h-6" />
             </div>
             <h1 className="font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600 dark:from-white dark:to-slate-300">
               Pro<span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">dify</span>
@@ -277,18 +342,18 @@ function App() {
         <div className="flex flex-col p-4 gap-1.5 overflow-y-auto flex-1 custom-scrollbar relative z-10">
           <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 mt-2 px-3">Workspace Navigasi</div>
           {navItems.map(({ key, icon, label, classes }) => (
-            <MenuButton key={key} active={activeMenu === key} onClick={() => { setActiveMenu(key); setIsSidebarOpen(false); }} icon={icon} label={label} classes={classes} />
+            <MenuButton key={key} active={activeMenu === key} onClick={() => navigateTo(key)} icon={icon} label={label} classes={classes} />
           ))}
         </div>
 
         {/* SIDEBAR FOOTER: USER PROFILE CARD */}
         <div className="p-4 border-t border-slate-200/50 dark:border-slate-800/80 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md relative z-10">
-          <div onClick={() => { setActiveMenu('profile'); setIsSidebarOpen(false); }}
+          <div onClick={() => navigateTo('profile')}
             className={`flex items-center justify-between p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 border ${activeMenu === 'profile' ? 'border-purple-400 dark:border-purple-500 shadow-md shadow-purple-500/10 ring-2 ring-purple-50 dark:ring-purple-500/20' : 'border-slate-200/60 dark:border-slate-700/60 hover:border-purple-300 dark:hover:border-purple-500/50 hover:shadow-md'} transition-all cursor-pointer group`}>
 
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative shrink-0">
-                <img src={profileAvatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}&background=A855F7&color=fff&bold=true&size=80`} alt="Profile" className="w-10 h-10 rounded-full ring-2 ring-purple-100 dark:ring-purple-900 object-cover" />
+                <img src={profileAvatar || makeAvatarDataUri(user?.name || 'User')} alt="Profile" className="w-10 h-10 rounded-full ring-2 ring-purple-100 dark:ring-purple-900 object-cover" />
                 <div className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md border-2 border-white dark:border-slate-800 shadow-sm">
                   Lv.{userLevel}
                 </div>
@@ -343,7 +408,7 @@ function App() {
                 {showSearchDrop && (
                   <MotionDiv initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden z-[100]">
                     {searchResults.length > 0 ? searchResults.map((r, i) => (
-                      <div key={i} onMouseDown={() => { setActiveMenu(r.action); setSearchQuery(''); setShowSearchDrop(false); }} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-0 flex items-center gap-3">
+                      <div key={i} onMouseDown={() => { navigateTo(r.action); setSearchQuery(''); setShowSearchDrop(false); }} className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-0 flex items-center gap-3">
                         <span className="text-[9px] font-bold text-white bg-indigo-500 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">{r.type}</span>
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 truncate">{r.title}</span>
                       </div>
@@ -375,7 +440,7 @@ function App() {
                     </div>
                     <div className="max-h-80 overflow-y-auto custom-scrollbar">
                       {notifications.length > 0 ? notifications.map((n, i) => (
-                        <div key={i} onMouseDown={() => { setActiveMenu(n.target); setShowNotif(false); }} className="p-4 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex gap-3 items-start cursor-pointer group">
+                        <div key={i} onMouseDown={() => { navigateTo(n.target); setShowNotif(false); }} className="p-4 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex gap-3 items-start cursor-pointer group">
                           <div className={`p-2 rounded-full mt-0.5 shrink-0 transition-colors ${n.type === 'urgent' ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-500 dark:text-rose-400 group-hover:bg-rose-200' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-500 dark:text-amber-400 group-hover:bg-amber-200'}`}>
                             <Bell className="w-4 h-4" />
                           </div>
@@ -396,7 +461,7 @@ function App() {
               </AnimatePresence>
             </div>
 
-            <button onClick={() => setActiveMenu('settings')}
+            <button onClick={() => navigateTo('settings')}
               className={`relative p-2.5 transition-colors cursor-pointer rounded-full border shadow-sm focus:ring-2 focus:ring-indigo-500 ${activeMenu === 'settings' ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 border-indigo-200 dark:border-indigo-500/30' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
               <SettingsIcon className="w-5 h-5" />
             </button>
@@ -448,7 +513,9 @@ function App() {
               <div className="p-8">
                 {onboardingStep === 1 && (
                   <div className="text-center animate-fade-in">
-                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-4"><Layers className="w-8 h-8" /></div>
+                    <div className="w-16 h-16 bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                      <img src="/brand-logo.png" alt="Prodify Logo" className="w-9 h-9" />
+                    </div>
                     <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Bukan Sekadar To-Do List</h3>
                     <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Kelima fitur di sini (Notes, Task, Habit, Focus, Dashboard) <strong>saling terhubung secara magis</strong>. Kebiasaan baikmu akan meningkatkan kapasitas mental untuk mengerjakan tugas!</p>
                   </div>

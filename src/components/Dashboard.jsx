@@ -129,7 +129,7 @@ const QUOTES = [
   },
 ];
 
-const Dashboard = () => {
+const Dashboard = ({ onNavigate, onTriggerCognitiveGuard } = {}) => {
   // MENGGUNAKAN CUSTOM HOOKS BARU
   const { energyCoins } = useSynergyState();
 
@@ -301,7 +301,6 @@ const Dashboard = () => {
         const newScores = { ...prev };
         for (const key in effect) newScores[key] = Math.max(0, Math.min(100, newScores[key] + effect[key]));
         setJson('prodify_radar_scores', newScores);
-        window.dispatchEvent(new Event('radarScoreUpdated'));
         return newScores;
       });
     }
@@ -313,7 +312,6 @@ const Dashboard = () => {
     setEvaluationState('evaluating'); setCurrentQuestion(0);
     const init = { akademik: 50, organisasi: 50, istirahat: 50, sosial: 50, tugas: 50 };
     setScores(init); setJson('prodify_radar_scores', init);
-    window.dispatchEvent(new Event('radarScoreUpdated'));
     setInsightText(''); setFinalInsight('');
   };
 
@@ -421,7 +419,7 @@ const Dashboard = () => {
             </p>
           </div>
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent('triggerCognitiveGuard'))}
+            onClick={() => (typeof onTriggerCognitiveGuard === 'function' ? onTriggerCognitiveGuard() : null)}
             className="shrink-0 px-6 py-3.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-2xl shadow-lg shadow-teal-500/30 transition-all active:scale-95 cursor-pointer flex items-center gap-2"
           >
             <Sparkles className="w-5 h-5" /> Ambil Waktu Jeda
@@ -497,7 +495,7 @@ const Dashboard = () => {
                   {projectProgress.completed} dari {projectProgress.total} Tugas Selesai
                 </p>
                 <button
-                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'zennotes' }))}
+                  onClick={() => (typeof onNavigate === 'function' ? onNavigate('zennotes') : null)}
                   className="text-[10px] bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/20 px-4 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md">
                   Lanjutkan Menulis ✍️
                 </button>

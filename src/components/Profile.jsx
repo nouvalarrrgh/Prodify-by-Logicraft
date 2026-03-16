@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, Mail, GraduationCap, MapPin, Camera, Save, Phone, AtSign, Flame, CheckCircle2, TreePine, BarChart2, AlertTriangle } from 'lucide-react';
 import { getJson, setJson } from '../utils/storage';
+import { makeAvatarDataUri } from '../utils/avatar';
+import { compressImageFileToDataUrl } from '../utils/image';
+import { prodifyAlert, prodifyConfirm } from '../utils/popup';
 
 const getInitialProfile = () => {
     const baseProfile = {
@@ -92,26 +95,36 @@ export default function Profile() {
         setIsEditing(false);
     };
 
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (file.size > 2.5 * 1024 * 1024) {
-                alert("Ukuran gambar terlalu besar! Maksimal 2.5MB.");
-                return;
-            }
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result;
-                const updatedProfile = { ...profile, avatar: base64String };
-                setProfile(updatedProfile);
-                setJson('prodify_profileInfo', updatedProfile);
-            };
-            reader.readAsDataURL(file);
+    const handleImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const dataUrl = await compressImageFileToDataUrl(file, {
+                maxDimension: 300,
+                maxBytes: 100 * 1024,
+                preferType: 'image/webp',
+                quality: 0.72,
+            });
+            const updatedProfile = { ...profile, avatar: dataUrl };
+            setProfile(updatedProfile);
+            setJson('prodify_profileInfo', updatedProfile);
+        } catch (err) {
+            console.error(err);
+            await prodifyAlert({ title: 'Upload Gagal', message: "Gagal memproses foto profil. Coba gunakan gambar lain atau crop lebih kecil." });
+        } finally {
+            // allow re-upload same file
+            e.target.value = '';
         }
     };
 
-    const handleResetAccount = () => {
-        const ok = window.confirm('Reset akun akan menghapus seluruh data Prodify di browser ini. Lanjutkan?');
+    const handleResetAccount = async () => {
+        const ok = await prodifyConfirm({
+            title: 'Reset Akun',
+            message: 'Reset akun akan menghapus seluruh data Prodify di browser ini. Lanjutkan?',
+            confirmText: 'Reset',
+            cancelText: 'Batal',
+            danger: true,
+        });
         if (!ok) return;
         try {
             localStorage.clear();
@@ -146,7 +159,7 @@ export default function Profile() {
 
                     <div className="relative group z-10">
                         <img
-                            src={profile.avatar || `https://ui-avatars.com/api/?name=${profile.name || 'Student'}&background=4F46E5&color=fff&size=512&bold=true`}
+                            src={profile.avatar || makeAvatarDataUri(profile.name || 'Student')}
                             alt="Profile"
                             className="w-32 h-32 rounded-full ring-4 ring-indigo-50 dark:ring-indigo-900 shadow-xl object-cover transition-transform group-hover:scale-105"
                         />

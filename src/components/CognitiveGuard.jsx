@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, X } from 'lucide-react';
 
@@ -15,10 +15,11 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const MotionDiv = motion.div;
 const MotionH3 = motion.h3;
 
-const CognitiveGuard = () => {
+const CognitiveGuard = ({ manualTriggerSignal = 0 }) => {
     const [triggerGuard, setTriggerGuard] = useState(false);
     const [breathingPhase, setBreathingPhase] = useState('inhale');
     const [timeLeft, setTimeLeft] = useState(0);
+    const lastManualSignalRef = useRef(0);
 
     // =========================================================================
     // FITUR BARU (AUTO-TRIGGER LOGIC): Mendeteksi Overload / Burnout secara Cerdas
@@ -64,19 +65,22 @@ const CognitiveGuard = () => {
             }
         };
 
-        const handleManualTrigger = () => {
-            setTriggerGuard(true);
-        };
-
         window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('triggerCognitiveGuard', handleManualTrigger);
 
         return () => {
             window.removeEventListener('storage', checkCognitiveOverload);
             window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('triggerCognitiveGuard', handleManualTrigger);
         };
     }, [checkCognitiveOverload]);
+
+    useEffect(() => {
+        // Trigger manual dari parent (Dashboard/App) tanpa event global.
+        if (!manualTriggerSignal) return;
+        if (manualTriggerSignal !== lastManualSignalRef.current) {
+            lastManualSignalRef.current = manualTriggerSignal;
+            setTriggerGuard(true);
+        }
+    }, [manualTriggerSignal]);
 
     useEffect(() => {
         if (!triggerGuard) return undefined;

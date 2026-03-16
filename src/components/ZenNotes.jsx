@@ -10,6 +10,7 @@ import {
 import html2pdf from 'html2pdf.js';
 import { NekoMascotMini } from './NekoMascot';
 import { getJson, setJson } from '../utils/storage';
+import { prodifyAlert, prodifyPrompt } from '../utils/popup';
 
 const ZenNotes = () => {
   const [pages, setPages] = useState(() => {
@@ -53,6 +54,7 @@ const ZenNotes = () => {
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const pendingDrawRef = useRef(null);
   const [drawColor, setDrawColor] = useState('black');
   const [lineWidth, setLineWidth] = useState(4);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
@@ -109,7 +111,11 @@ const ZenNotes = () => {
     } catch (e) {
       if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
         setSaveStatus('Gagal: Memori Penuh!');
-        alert("🚨 MEMORI LOKAL BROWSER PENUH! 🚨\n\nKarena Prodify mengutamakan privasi (Local-First), penyimpanan browser Anda telah mencapai batas.\n\nSolusi:\n1. Ekspor catatan lama Anda ke PDF.\n2. Hapus halaman catatan lama untuk mengosongkan memori.");
+        prodifyAlert({
+          title: 'Penyimpanan Lokal Penuh',
+          message:
+            "Penyimpanan browser Anda sudah mencapai batas.\n\nSolusi:\n1. Ekspor catatan lama ke PDF.\n2. Hapus halaman yang sudah tidak terpakai.",
+        });
       } else {
         console.error("Terjadi kesalahan sistem saat menyimpan:", e);
       }
@@ -174,19 +180,10 @@ const ZenNotes = () => {
     }
   }, [drawColor, lineWidth]);
 
-  const getCoordinates = (e) => {
+  const getCoordinatesFromClient = (clientX, clientY) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-
-    let clientX, clientY;
-    if (e.touches && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
 
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -197,13 +194,34 @@ const ZenNotes = () => {
     };
   };
 
-  const startDrawing = (e) => {
-    if (e.cancelable) e.preventDefault();
-    if (e.clientX != null && e.clientY != null) {
-      setCursorPos({ x: e.clientX, y: e.clientY });
-      setShowDrawCursor(true);
+  const getClientPoint = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY, isTouch: true };
     }
-    const coords = getCoordinates(e);
+    return { x: e.clientX, y: e.clientY, isTouch: e.pointerType === 'touch' };
+  };
+
+  const startDrawing = (e) => {
+    const pt = getClientPoint(e);
+
+    // Mobile-friendly: allow scrolling. Start drawing only after a short hold.
+    if (pt.isTouch) {
+      if (pendingDrawRef.current?.timer) clearTimeout(pendingDrawRef.current.timer);
+      pendingDrawRef.current = {
+        startX: pt.x,
+        startY: pt.y,
+        ready: false,
+        timer: setTimeout(() => {
+          if (pendingDrawRef.current) pendingDrawRef.current.ready = true;
+        }, 120),
+      };
+      return;
+    }
+
+    if (e.cancelable) e.preventDefault();
+    setCursorPos({ x: pt.x, y: pt.y });
+    setShowDrawCursor(true);
+    const coords = getCoordinatesFromClient(pt.x, pt.y);
     if (!coords) return;
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(coords.x, coords.y);
@@ -211,24 +229,65 @@ const ZenNotes = () => {
   };
 
   const draw = (e) => {
+    const pt = getClientPoint(e);
+
+    // If touch: decide whether this gesture is scroll or draw.
+    if (!isDrawing && pendingDrawRef.current && pt.isTouch) {
+      const dx = pt.x - pendingDrawRef.current.startX;
+      const dy = pt.y - pendingDrawRef.current.startY;
+      const dist = Math.hypot(dx, dy);
+
+      // If user is swiping before hold completes, treat as scroll.
+      if (!pendingDrawRef.current.ready && dist > 10) {
+        clearTimeout(pendingDrawRef.current.timer);
+        pendingDrawRef.current = null;
+        return;
+      }
+
+      // Start drawing after hold.
+      if (pendingDrawRef.current.ready) {
+        if (e.cancelable) e.preventDefault();
+        setCursorPos({ x: pt.x, y: pt.y });
+        setShowDrawCursor(true);
+        const startCoords = getCoordinatesFromClient(pendingDrawRef.current.startX, pendingDrawRef.current.startY);
+        const coords = getCoordinatesFromClient(pt.x, pt.y);
+        if (!startCoords || !coords) return;
+        ctxRef.current.beginPath();
+        ctxRef.current.moveTo(startCoords.x, startCoords.y);
+        ctxRef.current.lineTo(coords.x, coords.y);
+        ctxRef.current.stroke();
+        setIsDrawing(true);
+        clearTimeout(pendingDrawRef.current.timer);
+        pendingDrawRef.current = null;
+      }
+      return;
+    }
+
     if (!isDrawing) return;
     if (e.cancelable) e.preventDefault();
-    if (e.clientX != null && e.clientY != null) {
-      setCursorPos({ x: e.clientX, y: e.clientY });
-      if (!showDrawCursor) setShowDrawCursor(true);
-    }
-    const coords = getCoordinates(e);
+
+    setCursorPos({ x: pt.x, y: pt.y });
+    if (!showDrawCursor) setShowDrawCursor(true);
+
+    const coords = getCoordinatesFromClient(pt.x, pt.y);
     if (!coords) return;
     ctxRef.current.lineTo(coords.x, coords.y);
     ctxRef.current.stroke();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e) => {
+    if (pendingDrawRef.current?.timer) {
+      clearTimeout(pendingDrawRef.current.timer);
+      pendingDrawRef.current = null;
+    }
+
     if (!isDrawing) return;
+    if (e?.cancelable) e.preventDefault();
+
     ctxRef.current.closePath();
     setIsDrawing(false);
     if (canvasRef.current) {
-      const dataUrl = canvasRef.current.toDataURL('image/webp', 0.5);
+      const dataUrl = canvasRef.current.toDataURL('image/webp', 0.45);
       updateActivePage('drawingData', dataUrl);
     }
     setShowDrawCursor(false);
@@ -261,16 +320,23 @@ const ZenNotes = () => {
   };
 
   const execCommand = (e, command, value = null) => {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (editorRef.current) editorRef.current.focus();
     document.execCommand(command, false, value);
     if (editorRef.current) handleEditorInput();
   };
 
-  const handleInsertLink = (e) => {
+  const handleInsertLink = async (e) => {
     e.preventDefault();
-    const url = prompt('Masukkan tautan (URL):', 'https://');
-    if (url) execCommand(e, 'createLink', url);
+    const url = await prodifyPrompt({
+      title: 'Sisipkan Tautan',
+      message: 'Masukkan URL yang valid.',
+      defaultValue: 'https://',
+      placeholder: 'https://contoh.com',
+      confirmText: 'Sisipkan',
+      cancelText: 'Batal',
+    });
+    if (url) execCommand(e, 'createLink', String(url).trim());
   };
 
   const handleInsertCheckbox = (e) => {
@@ -280,32 +346,51 @@ const ZenNotes = () => {
     execCommand(e, 'insertHTML', checkboxHtml);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!activePage) return;
-    let element;
-    if (noteMode === 'text') {
-      element = editorRef.current;
-    } else {
-      element = canvasRef.current;
-    }
-    if (!element) return;
+    const sourceEl = noteMode === 'text' ? editorRef.current : canvasRef.current;
+    if (!sourceEl) return;
 
-    const isDark = document.documentElement.classList.contains('dark');
-    if (isDark && noteMode === 'text') {
-      element.style.color = '#1e293b';
-      element.style.backgroundColor = '#ffffff';
-    }
+    // Export dari clone (offscreen) supaya tidak flicker, terutama saat Dark Mode.
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-10000px';
+    wrapper.style.top = '0';
+    wrapper.style.width = pageOrientation === 'potrait' ? '816px' : '1056px';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.color = '#0f172a';
+    wrapper.style.padding = '24px';
 
-    html2pdf().set({
-      margin: 1, filename: `${activePage.title || 'Catatan'}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: pageOrientation === 'potrait' ? 'portrait' : 'landscape' }
-    }).from(element).save().then(() => {
-      if (isDark && noteMode === 'text') {
-        element.style.color = '';
-        element.style.backgroundColor = '';
+    try {
+      if (noteMode === 'text') {
+        const clone = sourceEl.cloneNode(true);
+        clone.contentEditable = 'false';
+        clone.style.background = '#ffffff';
+        clone.style.color = '#0f172a';
+        clone.style.minHeight = 'auto';
+        wrapper.appendChild(clone);
+      } else {
+        const canvas = canvasRef.current;
+        const img = new Image();
+        img.alt = activePage.title || 'Whiteboard';
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.src = canvas.toDataURL('image/png');
+        wrapper.appendChild(img);
       }
-    });
+
+      document.body.appendChild(wrapper);
+
+      await html2pdf().set({
+        margin: 1,
+        filename: `${activePage.title || 'Catatan'}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: pageOrientation === 'potrait' ? 'portrait' : 'landscape' }
+      }).from(wrapper).save();
+    } finally {
+      wrapper.remove();
+    }
   };
 
   const toggleFullscreen = () => {
@@ -383,7 +468,7 @@ const ZenNotes = () => {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (!file.type.startsWith('image/')) { alert('Tolong unggah file gambar yang valid.'); return; }
+      if (!file.type.startsWith('image/')) { prodifyAlert({ title: 'Upload Gagal', message: 'Tolong unggah file gambar yang valid.' }); return; }
       const reader = new FileReader();
       reader.onload = (event) => {
         if (editorRef.current) editorRef.current.focus();
@@ -444,7 +529,9 @@ const ZenNotes = () => {
   };
 
   const PAGE_HEIGHT = pageOrientation === 'potrait' ? 1056 : 816;
-  const editorClasses = `w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} ${pageOrientation === 'potrait' ? 'max-w-[816px]' : 'max-w-[1056px]'}`;
+  const PAGE_WIDTH = pageOrientation === 'potrait' ? 816 : 1056;
+  const editorClasses = `bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-10 md:p-16 pb-32 text-slate-800 dark:text-slate-200 text-base focus:outline-none focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-500/30 prose max-w-none prose-slate dark:prose-invert prose-img:rounded-xl prose-img:max-w-full prose-headings:font-bold break-words break-all [word-break:break-word] overflow-wrap-anywhere transition-all duration-300 ${lineSpacing} mx-auto w-full md:w-[var(--page-width)]`;
+  const portalRoot = (typeof document !== 'undefined' && document.fullscreenElement) ? document.fullscreenElement : (typeof document !== 'undefined' ? document.body : null);
 
   return (
     <>
@@ -665,6 +752,17 @@ const ZenNotes = () => {
                     {/* Tools */}
                     <div className="flex items-center gap-1">
                       <button
+                        onClick={() => setPageOrientation(prev => prev === 'potrait' ? 'landscape' : 'potrait')}
+                        className={`p-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-colors ${
+                          pageOrientation === 'landscape'
+                            ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-200'
+                            : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                        title="Ubah Orientasi Kanvas"
+                      >
+                        <ArrowLeftRight className="w-4 h-4" /> {pageOrientation === 'potrait' ? 'Potrait' : 'Landscape'}
+                      </button>
+                      <button
                         onClick={() => setTool('eraser')}
                         className={`p-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-colors ${drawColor === 'white' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                       >
@@ -689,7 +787,7 @@ const ZenNotes = () => {
               <div className="flex-1 flex overflow-hidden w-full relative">
 
                 {/* AREA MENGETIK UTAMA */}
-                <div className={`flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 flex justify-center items-start p-4 md:p-8 transition-all duration-300 ${showProjectPanel ? 'md:mr-72' : ''}`}>
+                <div className={`flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 p-4 md:p-8 transition-all duration-300 ${showProjectPanel ? 'md:mr-72' : ''}`}>
                   {noteMode === 'text' ? (
                     <div
                       ref={editorRef}
@@ -700,22 +798,20 @@ const ZenNotes = () => {
                       onKeyUp={handleTextSelection}
                       onBlur={() => setTimeout(() => setShowTaskPopup(false), 120)}
                       className={editorClasses}
-                      style={{ minHeight: `${PAGE_HEIGHT}px`, height: 'max-content', marginBottom: '40px' }}
+                      style={{ minHeight: `${PAGE_HEIGHT}px`, height: 'max-content', marginBottom: '40px', '--page-width': `${PAGE_WIDTH}px`, width: `${PAGE_WIDTH}px` }}
                       data-placeholder="Mulai menulis jurnal, gagasan, atau draf project di sini..."
                     />
                   ) : (
-                    <div className="w-full max-w-[1056px] bg-[#f9fafb] border border-slate-200 shadow-md relative" style={{ minHeight: '700px', cursor: 'crosshair', touchAction: 'none' }}>
+                    <div className="w-full md:w-[var(--page-width)] bg-[#f9fafb] border border-slate-200 shadow-md relative min-h-[420px] md:min-h-[700px] cursor-crosshair touch-auto mx-auto" style={{ '--page-width': `${PAGE_WIDTH}px`, width: `${PAGE_WIDTH}px` }}>
                       <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #4f46e5 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
                       <canvas
                         ref={canvasRef}
                         onPointerDown={startDrawing}
                         onPointerMove={draw}
                         onPointerUp={stopDrawing}
+                        onPointerCancel={stopDrawing}
                         onPointerOut={stopDrawing}
-                        onTouchStart={startDrawing}
-                        onTouchMove={draw}
-                        onTouchEnd={stopDrawing}
-                        className="absolute inset-0 w-full h-full touch-none"
+                        className={`absolute inset-0 w-full h-full ${isDrawing ? 'touch-none' : 'touch-pan-y'}`}
                       />
                     </div>
                   )}
@@ -788,7 +884,7 @@ const ZenNotes = () => {
         </main>
 
         {/* MODAL BUAT HALAMAN (DENGAN TEMPLATE) */}
-        {isModalOpen && createPortal(
+        {isModalOpen && portalRoot && createPortal(
           <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in">
             <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-full max-w-md border border-white dark:border-slate-700 overflow-hidden animate-fade-in-up">
               <div className="bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 border-b border-indigo-100 dark:border-indigo-500/20 px-6 py-5 flex items-center gap-3">
@@ -818,7 +914,7 @@ const ZenNotes = () => {
               </div>
             </div>
           </div>
-          , document.body)}
+          , portalRoot)}
       </div>
     </>
   );

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Calendar as CalendarIcon, Target, Inbox, Sun, Sparkles, AlertTriangle, X, Check, CheckCircle, Edit2, Clock, MapPin, BookOpen, MoreVertical, Bell } from 'lucide-react';
+import { getJson, setJson, getLocalDateKey } from '../../utils/storage';
+import { prodifyConfirm } from '../../utils/popup';
 
 const CATEGORY_META = {
   academic: { label: "Akademik", icon: "📚" },
@@ -25,14 +27,92 @@ const WeeklyCalendar = ({
   next7Days, currentDate, setCurrentDate, isSameDay, scheduledBlocks, getDayFormatted,
   todayBlocks, isBurnout, currentDailyEnergy, MAX_DAILY_ENERGY, synergyState, tasks,
   quadrants, removeBlock, dateStrKey, globalGoal, setGlobalGoal, isEditingGoal,
-  setIsEditingGoal, academicSchedule = [], onAssignQuadrant,
+  setIsEditingGoal, academicSchedule = [], onAssignQuadrant, onClearBlocksForDate,
 }) => {
   const timeGrid = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}`);
+  const timelineScrollRef = React.useRef(null);
+  const optionsWrapRef = React.useRef(null);
+  const bellWrapRef = React.useRef(null);
+
   const [upcomingEvent, setUpcomingEvent] = React.useState(null);
   const [showOptions, setShowOptions] = React.useState(false);
+  const [isTimelineFullscreen, setIsTimelineFullscreen] = React.useState(false);
+  const [showReminders, setShowReminders] = React.useState(false);
+  const [alertsEnabled, setAlertsEnabled] = React.useState(() => getJson('prodify_timeline_alerts_v1', false));
   const [showMapModal, setShowMapModal] = React.useState(false);
   const [taskToMap, setTaskToMap] = React.useState(null);
   const [selectedQuadrant, setSelectedQuadrant] = React.useState(quadrants[0]?.id || "urgent-important");
+
+  const scrollToHour = React.useCallback((hourStr) => {
+    if (!timelineScrollRef.current) return;
+    const el = timelineScrollRef.current.querySelector(`[data-hour="${hourStr}"]`);
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const jumpToNow = React.useCallback(() => {
+    const now = new Date();
+    const hourStr = `${now.getHours()}`.padStart(2, '0');
+    scrollToHour(hourStr);
+  }, [scrollToHour]);
+
+  const jumpToUpcoming = React.useCallback(() => {
+    if (!upcomingEvent) return;
+    const t = upcomingEvent.isClass ? (upcomingEvent.startTime || "00:00") : (upcomingEvent.time || "00:00");
+    const hourStr = `${(t.split(':')[0] || "00")}`.padStart(2, '0');
+    const todayKey = getLocalDateKey(new Date());
+    const viewingKey = getLocalDateKey(currentDate);
+    if (todayKey !== viewingKey) {
+      // Reminders are for "today". If user is viewing another day, jump to today first.
+      const now = new Date();
+      setCurrentDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+      setTimeout(() => scrollToHour(hourStr), 80);
+      return;
+    }
+    scrollToHour(hourStr);
+  }, [currentDate, scrollToHour, setCurrentDate, upcomingEvent]);
+
+  const exportSelectedDay = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const dateKey = dateStrKey;
+    const blocks = scheduledBlocks?.[dateKey] || [];
+    const dayOfWeek = currentDate.getDay();
+    const classes = (academicSchedule || []).filter((s) => Number(s.dayOfWeek) === Number(dayOfWeek));
+
+    const payload = {
+      app: "Prodify",
+      type: "weekly_calendar_day_export",
+      date: dateKey,
+      exportedAt: new Date().toISOString(),
+      blocks,
+      classes,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prodify_schedule_${dateKey}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [academicSchedule, currentDate, dateStrKey, scheduledBlocks]);
+
+  const requestEnableAlerts = React.useCallback(async () => {
+    setAlertsEnabled(true);
+    setJson('prodify_timeline_alerts_v1', true);
+    if (typeof Notification === 'undefined' || !Notification.requestPermission) return;
+    if (Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch { /* ignore */ }
+    }
+  }, []);
+
+  const disableAlerts = React.useCallback(() => {
+    setAlertsEnabled(false);
+    setJson('prodify_timeline_alerts_v1', false);
+  }, []);
 
   const openMapModal = (task) => {
     setTaskToMap(task);
@@ -49,12 +129,10 @@ const WeeklyCalendar = ({
   };
 
   React.useEffect(() => {
-    const checkUpcoming = () => {
+      const checkUpcoming = () => {
       const now = new Date();
       // Use local date key instead of todayBlocks because todayBlocks depends on currentDate (which could be another day selected by user)
-      const d = new Date(now);
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      const dateKey = d.toISOString().split("T")[0];
+      const dateKey = getLocalDateKey(now);
       const realTodayBlocks = scheduledBlocks[dateKey] || [];
 
       let nextEvent = null;
@@ -98,8 +176,66 @@ const WeeklyCalendar = ({
     return () => clearInterval(intv);
   }, [scheduledBlocks, academicSchedule]);
 
+  React.useEffect(() => {
+    if (!alertsEnabled || !upcomingEvent) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+
+    // Only notify when event is close, and never twice for the same event/time.
+    if (Number(upcomingEvent.diffMins) > 10) return;
+
+    const dateKey = getLocalDateKey(new Date());
+    const t = upcomingEvent.isClass ? (upcomingEvent.startTime || "00:00") : (upcomingEvent.time || "00:00");
+    const baseId = upcomingEvent.id || upcomingEvent.taskId || upcomingEvent.title || "event";
+    const notifyKey = `${dateKey}|${upcomingEvent.isClass ? "class" : "task"}|${baseId}|${t}`;
+
+    const lastKey = getJson('prodify_timeline_last_notified_v1', null);
+    if (lastKey === notifyKey) return;
+
+    try {
+      new Notification("Prodify: Jadwal sebentar lagi", {
+        body: `${upcomingEvent.title} dalam ${Math.ceil(Number(upcomingEvent.diffMins))} menit.`,
+      });
+      setJson('prodify_timeline_last_notified_v1', notifyKey);
+    } catch {
+      // Ignore notification errors (unsupported/blocked).
+    }
+  }, [alertsEnabled, upcomingEvent]);
+
+  React.useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      setShowOptions(false);
+      setShowReminders(false);
+      setIsTimelineFullscreen(false);
+    };
+
+    const onPointerDown = (e) => {
+      const t = e.target;
+      if (showOptions && optionsWrapRef.current && t && !optionsWrapRef.current.contains(t)) {
+        setShowOptions(false);
+      }
+      if (showReminders && bellWrapRef.current && t && !bellWrapRef.current.contains(t)) {
+        setShowReminders(false);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [showOptions, showReminders]);
+
   return (
     <div className="liquid-glass dark:bg-slate-900/60 dark:border-slate-700/50 rounded-[2.5rem] spatial-shadow overflow-hidden transition-colors flex flex-col">
+      {isTimelineFullscreen && (
+        <div
+          className="fixed inset-0 z-[240] bg-slate-900/60 backdrop-blur-sm"
+          onClick={() => { setIsTimelineFullscreen(false); setShowOptions(false); setShowReminders(false); }}
+        />
+      )}
       <div className="p-6 md:p-8 border-b border-slate-200/60 dark:border-slate-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3">
           <div className="bg-indigo-600 text-white p-2 rounded-xl shadow-md">
@@ -144,22 +280,122 @@ const WeeklyCalendar = ({
       <div className="flex flex-col xl:flex-row gap-0 flex-1">
 
         {/* KIRI: AREA TIME BLOCKING (DIROMBAK TOTAL SESUAI REFERENSI) */}
-        <div className="flex-1 p-6 md:p-8 flex flex-col">
+        <div
+          className={isTimelineFullscreen
+            ? "fixed inset-3 md:inset-6 z-[260] flex flex-col p-4 md:p-6 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700"
+            : "flex-1 p-6 md:p-8 flex flex-col"
+          }
+        >
 
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
               <Clock className="w-5 h-5 text-indigo-500" /> Timeline: {getDayFormatted(currentDate)}
             </h2>
             <div className="flex items-center space-x-3 text-slate-400 relative">
-              {upcomingEvent ? (
-                <div className="flex items-center gap-2 mr-2 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 px-3 py-1.5 rounded-lg text-xs font-bold animate-pulse shadow-sm">
-                  <Bell className="w-4 h-4" /> {upcomingEvent.title} dalam {Math.ceil(upcomingEvent.diffMins)} mnt
-                </div>
-              ) : (
-                <Bell className="w-5 h-5 cursor-pointer hover:text-indigo-500 transition-colors" />
-              )}
+              <div ref={bellWrapRef} className="relative">
+                {upcomingEvent ? (
+                  <button
+                    type="button"
+                    onClick={() => { setShowReminders((v) => !v); jumpToUpcoming(); }}
+                    className="flex items-center gap-2 mr-2 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 px-3 py-1.5 rounded-lg text-xs font-bold animate-pulse shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    title="Klik untuk lihat pengingat"
+                  >
+                    <Bell className="w-4 h-4" /> {upcomingEvent.title} dalam {Math.ceil(upcomingEvent.diffMins)} mnt
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowReminders((v) => !v)}
+                    className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-indigo-500 transition-colors cursor-pointer"
+                    title="Pengingat timeline"
+                  >
+                    <Bell className="w-5 h-5" />
+                  </button>
+                )}
 
-              <div className="relative">
+                {showReminders && (
+                  <div className="absolute right-0 top-8 mt-1 w-72 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 p-3 z-50 animate-fade-in text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Pengingat</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">
+                          {upcomingEvent ? "Ada jadwal dekat." : "Belum ada jadwal dekat."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowReminders(false)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 cursor-pointer"
+                        title="Tutup"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {upcomingEvent && (
+                      <div className="mt-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+                        <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                          {upcomingEvent.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          Mulai {upcomingEvent.isClass ? upcomingEvent.startTime : upcomingEvent.time} (sekitar {Math.ceil(upcomingEvent.diffMins)} menit lagi)
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            type="button"
+                            onClick={() => { jumpToUpcoming(); setShowReminders(false); }}
+                            className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                          >
+                            Lompat ke Jadwal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setShowReminders(false); }}
+                            className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-200 cursor-pointer"
+                          >
+                            Oke
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Notifikasi</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                          Notifikasi 10 menit sebelum
+                        </div>
+                        {alertsEnabled ? (
+                          <button
+                            type="button"
+                            onClick={disableAlerts}
+                            className="px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-black cursor-pointer"
+                            title="Matikan notifikasi"
+                          >
+                            Aktif
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={requestEnableAlerts}
+                            className="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-black cursor-pointer"
+                            title="Aktifkan notifikasi"
+                          >
+                            Nyalakan
+                          </button>
+                        )}
+                      </div>
+                      {alertsEnabled && typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+                          Izin notifikasi belum diberikan. Klik "Nyalakan" lalu izinkan di browser.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div ref={optionsWrapRef} className="relative">
                 <MoreVertical
                   className="w-5 h-5 cursor-pointer hover:text-indigo-500 transition-colors"
                   onClick={() => setShowOptions(!showOptions)}
@@ -167,11 +403,39 @@ const WeeklyCalendar = ({
 
                 {showOptions && (
                   <div className="absolute right-0 top-8 mt-1 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 py-2 z-50 animate-fade-in text-sm font-medium">
-                    <button className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-2" onClick={() => { alert("Opsi: Mode Fokus Kalender akan segera hadir!"); setShowOptions(false); }}>
-                      <Target className="w-4 h-4" /> Mode Fokus
+                    <button
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-2"
+                      onClick={() => { setIsTimelineFullscreen((v) => !v); setShowOptions(false); }}
+                    >
+                      <Target className="w-4 h-4" /> {isTimelineFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
                     </button>
-                    <button className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-2" onClick={() => { alert("Opsi: Ekspor Kalender akan segera hadir!"); setShowOptions(false); }}>
-                      <CalendarIcon className="w-4 h-4" /> Ekspor Jadwal
+                    <button
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-2"
+                      onClick={() => { jumpToNow(); setShowOptions(false); }}
+                    >
+                      <Clock className="w-4 h-4" /> Ke Jam Sekarang
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-2"
+                      onClick={() => { exportSelectedDay(); setShowOptions(false); }}
+                    >
+                      <CalendarIcon className="w-4 h-4" /> Ekspor Jadwal (JSON)
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 transition-colors flex items-center gap-2"
+                      onClick={async () => {
+                        const ok = await prodifyConfirm({
+                          title: 'Hapus Jadwal',
+                          message: `Hapus semua time block untuk tanggal ${dateStrKey}?`,
+                          confirmText: 'Hapus',
+                          cancelText: 'Batal',
+                          danger: true,
+                        });
+                        if (ok && onClearBlocksForDate) onClearBlocksForDate(dateStrKey);
+                        setShowOptions(false);
+                      }}
+                    >
+                      <Inbox className="w-4 h-4" /> Hapus Jadwal Hari Ini
                     </button>
                     <div className="h-px w-full bg-slate-100 dark:bg-slate-700 my-1"></div>
                     <button className="w-full text-left px-4 py-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 transition-colors flex items-center gap-2" onClick={() => setShowOptions(false)}>
@@ -201,7 +465,10 @@ const WeeklyCalendar = ({
             </div>
 
             {/* Area Scroll Timeline */}
-            <div className="relative flex-1 overflow-y-auto max-h-[500px] custom-scrollbar bg-[#fcfcfc] dark:bg-transparent">
+            <div
+              ref={timelineScrollRef}
+              className={`relative flex-1 overflow-y-auto custom-scrollbar bg-[#fcfcfc] dark:bg-transparent ${isTimelineFullscreen ? 'max-h-[calc(100vh-220px)]' : 'max-h-[500px]'}`}
+            >
 
               {/* Garis Latar Belakang (Grid Vertikal) */}
               <div className="absolute inset-0 grid grid-cols-6 border-l border-slate-100 dark:border-slate-800/50 ml-[60px] pointer-events-none z-0">
@@ -227,7 +494,7 @@ const WeeklyCalendar = ({
                 const hasAnyBlock = blocksInHour.length > 0 || isDuringClass;
 
                 return (
-                  <div key={hour} className="flex min-h-[56px] border-b border-slate-100/80 dark:border-slate-800/80 group relative z-10 hover:bg-white dark:hover:bg-slate-800/30 transition-colors">
+                  <div key={hour} data-hour={hour} className="flex min-h-[56px] border-b border-slate-100/80 dark:border-slate-800/80 group relative z-10 hover:bg-white dark:hover:bg-slate-800/30 transition-colors">
 
                     {/* Kolom Jam */}
                     <div className="w-[60px] shrink-0 py-3 pr-3 flex flex-col items-end border-r border-slate-100 dark:border-slate-800/50 bg-white/50 dark:bg-transparent">

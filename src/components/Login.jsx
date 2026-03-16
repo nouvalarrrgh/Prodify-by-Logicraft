@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
   User as UserIcon,
-  Zap,
   GraduationCap,
   Target,
   BarChart2,
@@ -90,7 +89,7 @@ export default function Login({ onLogin }) {
 
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/15 backdrop-blur-sm border border-white/25 rounded-full text-white/90 text-xs font-black tracking-widest uppercase">
-              <Zap className="w-4 h-4 text-yellow-300" />
+              <img src="/brand-logo.png" alt="Prodify Logo" className="w-4 h-4" />
               Prodify
             </div>
             <h2 className="mt-4 text-3xl font-black text-white leading-tight">
@@ -132,8 +131,8 @@ export default function Login({ onLogin }) {
               <NekoMascotFull className="w-16 h-16 sm:w-20 sm:h-20 drop-shadow-md" animate={false} />
             </div>
             <div className="flex items-center gap-2 mt-3">
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg p-1.5">
-                <Zap className="h-4 w-4 text-white" />
+              <div className="bg-white/80 border border-slate-200 rounded-lg p-1.5 shadow-sm">
+                <img src="/brand-logo.png" alt="Prodify Logo" className="h-4 w-4" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
                 Prodi<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">fy</span>
@@ -230,4 +229,3 @@ export default function Login({ onLogin }) {
     </div>
   );
 }
-

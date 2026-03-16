@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, BookOpen, Brain, CalendarDays, Focus, 
-  Flame, Zap, Target, Lightbulb, Clock, GraduationCap, 
+  Flame, Target, Lightbulb, Clock, GraduationCap, 
   Coffee, Trophy, Rocket, Award, CheckCircle, Compass, 
   Star, Monitor, PenTool, Globe 
 } from 'lucide-react';
@@ -91,7 +91,7 @@ export default function HeroSection({ onStart, onDemo }) {
       <div className="container mx-auto px-6 text-center relative z-20 max-w-5xl mt-8">
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs md:text-sm font-bold mb-8 shadow-sm">
-            <Zap className="w-4 h-4 text-amber-500" />
+            <img src="/brand-logo.png" alt="Prodify Logo" className="w-4 h-4" />
             Prodify: Transformasi Produktivitas Mahasiswa
           </span>
         </motion.div>

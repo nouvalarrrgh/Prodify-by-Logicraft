@@ -274,14 +274,28 @@ const TimeManager = () => {
     if (!taskToSchedule || !scheduleDate || !scheduleTime) return;
     const dateStr = scheduleDate;
     const newBlock = { id: createId(), taskId: taskToSchedule.id, title: taskToSchedule.title, time: scheduleTime || "00:00", quadrant: taskToSchedule.quadrant || "unassigned", energy: taskToSchedule.energy || 1, completed: false, category: taskToSchedule.category || getDefaultCategory() };
-    setScheduledBlocks({ ...scheduledBlocks, [dateStr]: [...(scheduledBlocks[dateStr] || []), newBlock].sort((a, b) => a.time.localeCompare(b.time)) });
+    setScheduledBlocks((prev) => ({
+      ...prev,
+      [dateStr]: [...(prev[dateStr] || []), newBlock].sort((a, b) => a.time.localeCompare(b.time)),
+    }));
     setShowScheduleModal(false);
     showNotification(`Tugas dijadwalkan pada jam ${scheduleTime}`);
     setTimeout(() => setTaskToSchedule(null), 300);
   };
 
   const removeBlock = (dateStr, blockId) => {
-    setScheduledBlocks({ ...scheduledBlocks, [dateStr]: scheduledBlocks[dateStr].filter((b) => b.id !== blockId) });
+    setScheduledBlocks((prev) => {
+      const day = prev[dateStr] || [];
+      return { ...prev, [dateStr]: day.filter((b) => b.id !== blockId) };
+    });
+  };
+
+  const clearBlocksForDate = (dateStr) => {
+    setScheduledBlocks((prev) => {
+      const next = { ...prev };
+      delete next[dateStr];
+      return next;
+    });
   };
 
   const quadrants = [
@@ -354,6 +368,7 @@ const TimeManager = () => {
               synergyState={synergyState} tasks={tasks} quadrants={quadrants} removeBlock={removeBlock}
               dateStrKey={dateStrKey} globalGoal={globalGoal} setGlobalGoal={saveGlobalGoal} isEditingGoal={isEditingGoal}
               setIsEditingGoal={setIsEditingGoal} academicSchedule={academicSchedule} onAssignQuadrant={assignTaskQuadrant}
+              onClearBlocksForDate={clearBlocksForDate}
             />
           </DragDropContext>
         </div>

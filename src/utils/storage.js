@@ -1,4 +1,5 @@
 // src/utils/storage.js
+import { prodifyAlert } from './popup';
 
 /**
  * Mengambil dan memparsing data dari LocalStorage dengan aman (Graceful Fallback)
@@ -29,7 +30,11 @@ export function setJson(key, value) {
     } catch (e) {
         console.error(`[Prodify Storage] Quota penuh atau error saat menyimpan: ${key}`, e);
         if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-            alert("🚨 PENYIMPANAN LOKAL PENUH!\n\nHarap lakukan backup data di menu Pengaturan dan hapus catatan (Whiteboard) yang sudah tidak terpakai.");
+            // Avoid native browser alert: show in-app popup.
+            prodifyAlert({
+                title: 'Penyimpanan Lokal Penuh',
+                message: "Harap lakukan backup data di menu Pengaturan dan hapus catatan (Whiteboard) yang sudah tidak terpakai.",
+            });
         }
     }
 }
