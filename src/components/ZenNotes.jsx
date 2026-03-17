@@ -5,7 +5,7 @@ import {
   Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2,
   Quote, Edit2, X, Check, Maximize2, Minimize2, Image as ImageIcon, Type,
   RemoveFormatting, CheckSquare, Printer, PenTool, Eraser, Palette, ArrowLeftRight,
-  PaintBucket, Link, Undo, Redo, Target, ChevronRight
+  PaintBucket, Link, Undo, Redo, Target, ChevronRight, Zap
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { NekoMascotMini } from './NekoMascot';
@@ -43,11 +43,8 @@ const ZenNotes = () => {
     const settings = getJson('prodify_settings', {});
     return settings.autoSaveNotes !== false;
   });
-
-  // === FITUR BARU: STATE UNTUK PANEL TARGET PROJECT ===
   const [showProjectPanel, setShowProjectPanel] = useState(false);
   const [projectTasks, setProjectTasks] = useState([]);
-
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const containerRef = useRef(null);
@@ -59,22 +56,20 @@ const ZenNotes = () => {
   const [lineWidth, setLineWidth] = useState(4);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [showDrawCursor, setShowDrawCursor] = useState(false);
-
   const activePage = pages.find(p => p.id === activePageId);
+
   const wordCount = useMemo(() => {
     const html = activePage?.content || '';
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     return text ? text.split(' ').length : 0;
   }, [activePage?.content]);
 
-  // === FITUR BARU: MENGAMBIL DATA TUGAS DARI BALANCE MATRIX ===
   useEffect(() => {
     const loadProjectTasks = () => {
       const allTasks = getJson('matrix_tasks', []);
       setProjectTasks(allTasks.filter(t => t.category === 'project'));
     };
     loadProjectTasks();
-    // Sinkronisasi otomatis jika data di tempat lain berubah
     window.addEventListener('storage', loadProjectTasks);
     window.addEventListener('prodify-sync', loadProjectTasks);
     return () => {
@@ -83,13 +78,11 @@ const ZenNotes = () => {
     };
   }, []);
 
-  // === FITUR BARU: MENCENTANG TUGAS DARI DALAM NOTES ===
   const toggleProjectTask = (id) => {
     const allTasks = getJson('matrix_tasks', []);
     const updated = allTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
     setJson('matrix_tasks', updated);
 
-    // Update local state agar instan
     setProjectTasks(updated.filter(t => t.category === 'project'));
   };
 
@@ -153,7 +146,6 @@ const ZenNotes = () => {
     setPages(prevPages => prevPages.map(p => p.id === activePageId ? { ...p, [field]: value } : p));
   };
 
-  // --- LOGIKA WHITEBOARD (CANVAS 2D) ---
   useEffect(() => {
     if (noteMode === 'draw' && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -212,7 +204,6 @@ const ZenNotes = () => {
   const startDrawing = (e) => {
     const pt = getClientPoint(e);
 
-    // Mobile-friendly: allow scrolling. Start drawing only after a short hold.
     if (pt.isTouch) {
       if (pendingDrawRef.current?.timer) clearTimeout(pendingDrawRef.current.timer);
       pendingDrawRef.current = {
@@ -239,20 +230,17 @@ const ZenNotes = () => {
   const draw = (e) => {
     const pt = getClientPoint(e);
 
-    // If touch: decide whether this gesture is scroll or draw.
     if (!isDrawing && pendingDrawRef.current && pt.isTouch) {
       const dx = pt.x - pendingDrawRef.current.startX;
       const dy = pt.y - pendingDrawRef.current.startY;
       const dist = Math.hypot(dx, dy);
 
-      // If user is swiping before hold completes, treat as scroll.
       if (!pendingDrawRef.current.ready && dist > 10) {
         clearTimeout(pendingDrawRef.current.timer);
         pendingDrawRef.current = null;
         return;
       }
 
-      // Start drawing after hold.
       if (pendingDrawRef.current.ready) {
         if (e.cancelable) e.preventDefault();
         setCursorPos({ x: pt.x, y: pt.y });
@@ -320,7 +308,6 @@ const ZenNotes = () => {
     }
   };
 
-  // --- LOGIKA TEKS EDITOR STANDARD ---
   const handleEditorInput = () => {
     if (editorRef.current) {
       updateActivePage('content', editorRef.current.innerHTML);
@@ -350,7 +337,7 @@ const ZenNotes = () => {
   const handleInsertCheckbox = (e) => {
     e.preventDefault();
     const id = Date.now();
-    const checkboxHtml = `<input type="checkbox" id="cb-${id}" style="margin-right: 8px; cursor: pointer;"> <label for="cb-${id}">To-Do Baru</label><br>`;
+    const checkboxHtml = `<input type="checkbox" id="cb-${id}" style="margin-right: 8px; cursor: pointer; accent-color: #4f46e5; width: 16px; height: 16px; transform: translateY(2px);"> <label for="cb-${id}">To-Do Baru</label><br>`;
     execCommand(e, 'insertHTML', checkboxHtml);
   };
 
@@ -359,7 +346,6 @@ const ZenNotes = () => {
     const sourceEl = noteMode === 'text' ? editorRef.current : canvasRef.current;
     if (!sourceEl) return;
 
-    // Export dari clone (offscreen) supaya tidak flicker, terutama saat Dark Mode.
     const wrapper = document.createElement('div');
     wrapper.style.position = 'fixed';
     wrapper.style.left = '-10000px';
@@ -463,7 +449,6 @@ const ZenNotes = () => {
 
   const handleOpenModal = () => { setNewPageTitle(''); setIsModalOpen(true); };
 
-  // === FITUR BARU: FUNGSI BUAT CATATAN BIASA ===
   const createBlankPage = (e) => {
     e.preventDefault();
     const title = newPageTitle.trim() || 'Catatan Baru';
@@ -474,30 +459,79 @@ const ZenNotes = () => {
     setSearchQuery('');
   };
 
-  // === FITUR BARU: FUNGSI GENERATE TEMPLATE SKRIPSI ===
+  // INOVASI KUNCI: AUTOMASI SKRIPSI LENGKAP & INTEGRASI MATRIX
   const createTemplateSkripsi = (e) => {
     e.preventDefault();
-    const title = newPageTitle.trim() || 'Draf Skripsi / Project';
+    const title = newPageTitle.trim() || 'Draf Skripsi & Jurnal';
 
-    // Ini HTML Template Cerdas yang akan langsung muncul di halaman
     const templateContent = `
-      <h1 style="text-align: center;"><strong>[JUDUL SKRIPSI / PROJECT BESAR]</strong></h1>
-      <p style="text-align: center; color: #64748b;"><em>Ditulis oleh: Mahasiswa Produktif</em></p>
-      <hr>
+      <h1 style="text-align: center; color: #1e293b;"><strong>[JUDUL SKRIPSI / PENELITIAN]</strong></h1>
+      <p style="text-align: center; color: #64748b;"><em>Gunakan template ini untuk menstrukturkan jalan pikiranmu. Sorot (blok) teks mana saja lalu klik "Jadikan Tugas" untuk melemparnya ke Target Project!</em></p>
+      <hr style="margin: 20px 0;">
+      
+      <h2><strong>📌 PROGRESS CHECKLIST PENELITIAN</strong></h2>
+      <ul style="list-style-type: none; padding-left: 0;">
+        <li><input type="checkbox" style="accent-color: #10b981; transform: scale(1.2); margin-right: 8px;"> <strong>Tahap 1:</strong> Menemukan Fenomena & Gap Penelitian (Latar Belakang)</li>
+        <li><input type="checkbox" style="accent-color: #10b981; transform: scale(1.2); margin-right: 8px;"> <strong>Tahap 2:</strong> Mengumpulkan minimal 10 Jurnal Pendukung (Tinjauan Pustaka)</li>
+        <li><input type="checkbox" style="accent-color: #10b981; transform: scale(1.2); margin-right: 8px;"> <strong>Tahap 3:</strong> Menentukan Metode & Desain Kuesioner/Wawancara</li>
+        <li><input type="checkbox" style="accent-color: #10b981; transform: scale(1.2); margin-right: 8px;"> <strong>Tahap 4:</strong> Olah Data & Bimbingan Dosen</li>
+        <li><input type="checkbox" style="accent-color: #10b981; transform: scale(1.2); margin-right: 8px;"> <strong>Tahap 5:</strong> Revisi Final & Sidang</li>
+      </ul>
       <br>
-      <h2><strong>BAB 1: PENDAHULUAN</strong></h2>
+
+      <h2 style="color: #4f46e5;"><strong>BAB 1: PENDAHULUAN</strong></h2>
       <h3>1.1 Latar Belakang Masalah</h3>
-      <p>Tuliskan permasalahan utama yang ingin diselesaikan di sini...</p>
+      <p><em>(Tuliskan fenomena yang terjadi di lapangan. Apa kesenjangan antara teori/harapan dan realita? Kenapa masalah ini penting untuk diangkat?)</em></p>
       <br>
       <h3>1.2 Rumusan Masalah</h3>
       <ol>
-        <li>Apa masalah pertama yang akan dipecahkan?</li>
-        <li>Bagaimana metode penyelesaiannya?</li>
+        <li>Bagaimana kondisi [Variabel X] di [Lokasi/Objek Penelitian]?</li>
+        <li>Sejauh mana pengaruh [Variabel X] terhadap [Variabel Y]?</li>
       </ol>
       <br>
-      <h2><strong>BAB 2: TINJAUAN PUSTAKA</strong></h2>
-      <h3>2.1 Kajian Terdahulu</h3>
-      <p>Masukkan referensi jurnal dan buku landasan teori di sini...</p>
+      <h3>1.3 Tujuan Penelitian</h3>
+      <p>Untuk mengidentifikasi dan menganalisis dampak dari...</p>
+      <br>
+
+      <h2 style="color: #4f46e5;"><strong>BAB 2: TINJAUAN PUSTAKA</strong></h2>
+      <h3>2.1 Kajian Terdahulu (State of the Art)</h3>
+      <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1;">
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold; background: #f8fafc;">Nama Peneliti (Tahun)</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold; background: #f8fafc;">Judul Jurnal</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold; background: #f8fafc;">Hasil Temuan</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">[Peneliti 1, 2024]</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">[Pengaruh...]</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">[Menunjukkan bahwa...]</td>
+          </tr>
+        </tbody>
+      </table>
+      <br>
+      <h3>2.2 Kerangka Konseptual</h3>
+      <p><em>(Jelaskan hubungan antar variabel. Jika ada grand theory, tuliskan di sini.)</em></p>
+      <br>
+
+      <h2 style="color: #4f46e5;"><strong>BAB 3: METODOLOGI PENELITIAN</strong></h2>
+      <h3>3.1 Jenis dan Pendekatan</h3>
+      <p>Penelitian ini menggunakan pendekatan [Kuantitatif / Kualitatif] dengan metode [Eksplanatori / Deskriptif]...</p>
+      <br>
+      <h3>3.2 Teknik Pengumpulan Data</h3>
+      <ul>
+        <li>Data Primer: (Kuesioner / Wawancara mendalam dengan...)</li>
+        <li>Data Sekunder: (Studi literatur, laporan BPS, dll...)</li>
+      </ul>
+      <br>
+      
+      <h2 style="color: #4f46e5;"><strong>BAB 4: HASIL & PEMBAHASAN</strong></h2>
+      <p><em>(Bagian ini diisi setelah data terkumpul dan selesai diolah menggunakan SPSS / NVivo / Tools lain)</em></p>
+      <br>
+
+      <h2 style="color: #4f46e5;"><strong>BAB 5: KESIMPULAN & SARAN</strong></h2>
+      <p>Berdasarkan rumusan masalah, dapat disimpulkan bahwa...</p>
+      <br><br>
     `;
 
     const newPage = { id: Date.now(), title: title, content: templateContent, drawingData: null };
@@ -505,9 +539,23 @@ const ZenNotes = () => {
     setActivePageId(newPage.id);
     setIsModalOpen(false);
     setSearchQuery('');
-
-    // Otomatis buka panel kanan saat membuat Skripsi
+    
+    // AUTOMASI: Langsung tembak 3 tugas awal ke Eisenhower Matrix kategori 'Project'
+    const existingTasks = getJson('matrix_tasks', []);
+    const autoTasks = [
+      { id: `auto1_${Date.now()}`, title: 'Drafting Bab 1: Latar Belakang & Rumusan Masalah', category: 'project', quadrant: 'urgent-important', energy: 2, completed: false, createdAt: new Date().toISOString() },
+      { id: `auto2_${Date.now()}`, title: 'Kumpulkan 5 Jurnal Pendukung untuk Bab 2', category: 'project', quadrant: 'not-urgent-important', energy: 1, completed: false, createdAt: new Date().toISOString() },
+      { id: `auto3_${Date.now()}`, title: 'Bimbingan Skripsi ke Dosen Pembimbing', category: 'project', quadrant: 'not-urgent-important', energy: 2, completed: false, createdAt: new Date().toISOString() },
+    ];
+    setJson('matrix_tasks', [...existingTasks, ...autoTasks]);
+    setProjectTasks(prev => [...prev, ...autoTasks]);
     setShowProjectPanel(true);
+
+    // Alert keberhasilan automasi
+    prodifyAlert({ 
+      title: "Automasi Skripsi Aktif! 🚀", 
+      message: "Template komprehensif berhasil dimuat.\n\n3 Tugas Awal telah ditambahkan secara otomatis ke panel Target Project di sebelah kanan untuk mempercepat progresmu!" 
+    });
   };
 
   const deletePage = (e, id) => {
@@ -540,7 +588,6 @@ const ZenNotes = () => {
   };
 
   const handleKeyDown = (e) => {
-    // Markdown shortcuts (mahasiswa mode cepat)
     if (e.key === ' ') {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0 && selection.isCollapsed) {
@@ -617,7 +664,12 @@ const ZenNotes = () => {
     const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
     const newTask = { id, title: cleanText, category: taskCategory, quadrant: 'unassigned', energy: 1, completed: false, createdAt: new Date().toISOString() };
 
-    setJson('matrix_tasks', [...existingTasks, newTask]); // ELEGAN DAN OTOMATIS SYNC!
+    setJson('matrix_tasks', [...existingTasks, newTask]);
+    
+    // Sinkronisasi dengan UI panel kanan jika aktif
+    if (taskCategory === 'project') {
+      setProjectTasks(prev => [...prev, newTask]);
+    }
 
     setSaveStatus('Tugas Ditambahkan!');
     setTimeout(() => setSaveStatus('Tersimpan Otomatis'), 2000);
@@ -633,8 +685,7 @@ const ZenNotes = () => {
     const existingDeadlines = getJson('prodify_tasks', []);
     const taskCategory = showProjectPanel ? 'project' : 'academic';
     const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString();
-
-    // Default deadline: besok 23:59 waktu lokal (aman untuk demo + bisa diedit di TimeManager).
+    
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setHours(23, 59, 0, 0);
@@ -668,8 +719,6 @@ const ZenNotes = () => {
   return (
     <>
       <div ref={containerRef} className={`flex flex-col md:flex-row h-full liquid-glass dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-700/50 overflow-hidden spatial-shadow transition-all ${isFullscreen ? 'fixed inset-0 z-[999] bg-slate-50 dark:bg-slate-950 w-full h-[100dvh] rounded-none' : 'rounded-3xl relative'}`}>
-
-        {/* SIDEBAR KIRI */}
         <aside className="w-full md:w-64 shrink-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md border-b md:border-b-0 md:border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col min-h-[150px] md:h-full z-10">
           <div className="p-3 md:p-4 border-b border-slate-200 dark:border-slate-700/50">
             <div className="flex items-center justify-between mb-3">
@@ -705,8 +754,6 @@ const ZenNotes = () => {
               ))}
             </div>
           </div>
-
-          {/* Mode Switcher */}
           <div className="p-3 md:p-4 mt-auto border-t border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80">
             <p className="text-[10px] text-slate-400 text-center font-bold mb-2 uppercase tracking-widest">Mode Kanvas</p>
             <div className="flex bg-slate-200/50 dark:bg-slate-800 rounded-lg p-1">
@@ -726,21 +773,22 @@ const ZenNotes = () => {
           </div>
         </aside>
 
-        {/* WORKSPACE TENGAH */}
         <main className="flex-1 flex flex-col relative min-w-0 h-[65%] md:h-full bg-white/30 dark:bg-slate-950/30 backdrop-blur-sm z-0">
           {!activePageId ? (
             <div className="flex-1 overflow-y-auto p-4 flex items-center justify-center">
-              <div className="flex flex-col items-center text-slate-400 opacity-80">
+              <div className="flex flex-col items-center text-slate-400 opacity-80 text-center">
                 <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 mb-4">
                   <Layout className="w-12 h-12 text-indigo-200 dark:text-indigo-500/50" strokeWidth={1.5} />
                 </div>
-                <p className="text-sm font-bold tracking-wide">Pilih atau buat halaman.</p>
+                <p className="text-sm font-bold tracking-wide text-slate-600 dark:text-slate-300">Pilih halaman atau mulai nulis Skripsi.</p>
+                <button onClick={handleOpenModal} className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 font-bold rounded-xl text-sm transition-colors hover:bg-indigo-100 cursor-pointer">
+                  Buat Dokumen Baru
+                </button>
               </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
 
-              {/* HEADER TOOLBAR ATAS */}
               <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm z-10 shrink-0 gap-4">
                 <input type="text" placeholder="Judul Catatan..." value={activePage?.title || ''} onChange={(e) => updateActivePage('title', e.target.value)} className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white border-none outline-none bg-transparent placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:text-indigo-900 dark:focus:text-indigo-300 w-full transition-colors" />
 
@@ -752,8 +800,6 @@ const ZenNotes = () => {
                   <button onClick={toggleFullscreen} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                     {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                   </button>
-
-                  {/* === TOMBOL TOGGLE PROJECT PANEL (BARU) === */}
                   <button
                     onClick={() => setShowProjectPanel(!showProjectPanel)}
                     className={`flex items-center gap-1.5 p-2 md:px-3 text-xs font-bold rounded-xl border shadow-sm cursor-pointer transition-colors ${showProjectPanel ? 'bg-rose-600 text-white border-rose-500' : 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10'}`}
@@ -762,16 +808,11 @@ const ZenNotes = () => {
                   </button>
                 </div>
               </div>
-
-              {/* TOOLBARS (TEXT ATAU DRAW) */}
               <div className="flex flex-col border-b border-slate-200/50 dark:border-slate-700/50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl sticky top-0 z-20 shrink-0 shadow-sm">
 
                 {noteMode === 'text' ? (
                   <>
-                    {/* TEXT TOOLBAR ROW 1 */}
                     <div className="flex flex-wrap items-center gap-1.5 p-2 px-4 justify-start overflow-x-auto custom-scrollbar">
-
-                      {/* Font Options */}
                       <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                         <select value={currentFont} onChange={(e) => { setCurrentFont(e.target.value); execCommand(e, 'fontName', e.target.value); }} className="bg-transparent text-slate-700 dark:text-slate-300 text-xs font-semibold focus:ring-0 outline-none cursor-pointer p-1.5 min-w-[120px]">
                           <option value="Arial">Arial</option>
@@ -796,7 +837,6 @@ const ZenNotes = () => {
 
                       <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
-                      {/* Undo/Redo */}
                       <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'undo')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Undo className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'redo')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Redo className="w-4 h-4" /></button>
@@ -805,24 +845,18 @@ const ZenNotes = () => {
                       </div>
 
                       <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-                      {/* Headings */}
                       <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'formatBlock', 'H1')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Heading1 className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'formatBlock', 'H2')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Heading2 className="w-4 h-4" /></button>
                       </div>
 
                       <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-                      {/* Formatting B/I/U/S */}
                       <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'bold')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Bold className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'italic')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Italic className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'underline')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Underline className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'strikeThrough')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><Strikethrough className="w-4 h-4" /></button>
                       </div>
-
-                      {/* Alignment */}
                       <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 ml-1 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'justifyLeft')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><AlignLeft className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'justifyCenter')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><AlignCenter className="w-4 h-4" /></button>
@@ -830,8 +864,6 @@ const ZenNotes = () => {
                       </div>
 
                       <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-                      {/* Lists & Links */}
                       <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 border border-slate-200/60 dark:border-slate-700/60">
                         <button onMouseDown={(e) => execCommand(e, 'insertUnorderedList')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><List className="w-4 h-4" /></button>
                         <button onMouseDown={(e) => execCommand(e, 'insertOrderedList')} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-md text-slate-600 dark:text-slate-300 tooltip"><ListOrdered className="w-4 h-4" /></button>
@@ -843,8 +875,6 @@ const ZenNotes = () => {
                       </div>
 
                     </div>
-
-                    {/* TEXT TOOLBAR ROW 2 */}
                     <div className="flex flex-wrap items-center gap-3 p-2 px-4 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-400 overflow-x-auto custom-scrollbar">
                       <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-300 p-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-500/10 cursor-pointer border border-transparent hover:border-indigo-100 dark:hover:border-indigo-500/30">
                         <ImageIcon className="w-3.5 h-3.5" /> Gambar
@@ -857,11 +887,8 @@ const ZenNotes = () => {
                     </div>
                   </>
                 ) : (
-                  // DRAWING TOOLBAR (WHITEBOARD)
                   <div className="flex flex-wrap items-center gap-3 p-2 px-4 overflow-x-auto custom-scrollbar bg-slate-50/80 dark:bg-slate-900/80">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:block">Peralatan</span>
-
-                    {/* Markers */}
                     <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                       {[
                         { color: 'black', label: 'Hitam' },
@@ -880,8 +907,6 @@ const ZenNotes = () => {
                     </div>
 
                     <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-                    {/* Tools */}
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setPageOrientation(prev => prev === 'potrait' ? 'landscape' : 'potrait')}
@@ -914,11 +939,7 @@ const ZenNotes = () => {
                   </div>
                 )}
               </div>
-
-              {/* EDITOR AREA + KANAN PANEL (FLEX CONTAINER) */}
               <div className="flex-1 flex overflow-hidden w-full relative">
-
-                {/* AREA MENGETIK UTAMA */}
                 <div className={`flex-1 overflow-auto w-full custom-scrollbar bg-slate-200/50 dark:bg-slate-950 p-4 md:p-8 transition-all duration-300 ${showProjectPanel ? 'md:mr-72' : ''}`}>
                   {noteMode === 'text' ? (
                     <div
@@ -947,11 +968,9 @@ const ZenNotes = () => {
                       />
                     </div>
                   )}
-
-                  {/* Floating Popup "Jadikan Tugas" */}
                   {showTaskPopup && noteMode === 'text' && (
                     <div
-                      className="absolute z-50 animate-fade-in-up bg-slate-900 dark:bg-slate-800 border dark:border-slate-700 text-white px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2"
+                      className="absolute z-50 animate-fade-in-up bg-slate-900 dark:bg-slate-800 border border-slate-700 text-white px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2"
                       style={{ left: `${popupPos.x}px`, top: `${popupPos.y}px`, transform: 'translateX(-50%)' }}
                       onMouseDown={(e) => e.preventDefault()}
                     >
@@ -975,8 +994,6 @@ const ZenNotes = () => {
                     </div>
                   )}
                 </div>
-
-                {/* === PANEL TARGET PROJECT MELAYANG DI KANAN === */}
                 <div className={`absolute right-0 top-0 bottom-0 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-l border-slate-200/60 dark:border-slate-700/60 shadow-2xl transition-transform duration-300 z-40 flex flex-col ${showProjectPanel ? 'translate-x-0' : 'translate-x-full'}`}>
                   <div className="p-4 border-b border-slate-200/60 dark:border-slate-700/60 flex justify-between items-center bg-rose-50/50 dark:bg-rose-900/10">
                     <h4 className="font-black text-rose-600 dark:text-rose-400 flex items-center gap-2 text-sm">
@@ -1033,14 +1050,13 @@ const ZenNotes = () => {
             </button>
           </div>
         </main>
-
-        {/* MODAL BUAT HALAMAN (DENGAN TEMPLATE) */}
         {isModalOpen && portalRoot && createPortal(
-          <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in p-4">
             <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2.5rem] shadow-2xl w-full max-w-md border border-white dark:border-slate-700 overflow-hidden animate-fade-in-up">
               <div className="bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 border-b border-indigo-100 dark:border-indigo-500/20 px-6 py-5 flex items-center gap-3">
                 <NekoMascotMini className="w-12 h-12 shrink-0" />
-                <div className="relative bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-2xl rounded-tl-none px-4 py-2">
+                <div className="relative bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 rounded-2xl rounded-tl-none px-4 py-2 shadow-sm">
+                  <div className="absolute -left-2 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-r-[8px] border-r-white dark:border-r-slate-800 border-b-[6px] border-b-transparent"></div>
                   <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 italic">"Mau nulis catatan biasa, atau nyicil skripsi nih? Nyaa~ 🎓"</p>
                 </div>
               </div>
@@ -1054,13 +1070,15 @@ const ZenNotes = () => {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <button onClick={createTemplateSkripsi} className="w-full px-6 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-md cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95">
-                    <Target className="w-5 h-5" /> Gunakan Template Skripsi/Project
+                  <button onClick={createTemplateSkripsi} className="w-full px-6 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-md cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                    <Zap className="w-5 h-5 relative z-10" /> 
+                    <span className="relative z-10">Automasi Template Skripsi</span>
                   </button>
                   <button onClick={createBlankPage} className="w-full px-6 py-4 rounded-xl font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer flex items-center justify-center gap-2 transition-transform active:scale-95 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/30">
-                    <FileText className="w-5 h-5" /> Catatan Kosong
+                    <FileText className="w-5 h-5" /> Catatan Kosong Biasa
                   </button>
-                  <button onClick={() => setIsModalOpen(false)} className="mt-2 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">Batal</button>
+                  <button onClick={() => setIsModalOpen(false)} className="mt-2 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer transition-colors">Batal</button>
                 </div>
               </div>
             </div>
